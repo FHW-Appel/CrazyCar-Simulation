@@ -194,3 +194,13 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Native build artefacts
+Release/
+Debug/
+*.dll
+*.lib
+*.exp
+src/py/carsim_native.*
+
+
