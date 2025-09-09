@@ -24,6 +24,7 @@ def update_parameters_in_interface(k1, k2, k3, kp1, kp2):
                 indent = line[:len(line) - len(line.lstrip())]
                 lines[i] = f"{indent}{parts[0].strip()} = {locals()[key]}\n"
                 break
+            
 
     with open(interface_path, encoding='utf-8', mode='w') as f:
         f.writelines(lines)
