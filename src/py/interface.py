@@ -1,66 +1,80 @@
 import pygame
 import math
-import cffi
 import time
 from abc import ABC, abstractmethod
-import car
 import os
+import car
 
-# Bildschirmfaktor (für Umrechnung Sim → Real)
+# --- Versuch: natives CFFI-Modul laden (bevorzugt) ---
+try:
+    from carsim_native import ffi, lib  # aus build_native.py gebautes *.pyd
+    _NATIVE_OK = True
+except Exception:
+    _NATIVE_OK = False
+    import cffi
+    ffi = cffi.FFI()
+
+    # Signaturen müssen exakt zu den C-Headern passen
+    ffi.cdef(r"""
+        void     fahr(int f);
+        int      getfwert(void);
+        void     servo(int s);
+        int      getswert(void);
+
+        void     getfahr(int8_t leistung);
+        void     getservo(int8_t winkel);
+
+        void     getabstandvorne(uint16_t analogwert);
+        void     getabstandrechts(uint16_t analogwert, uint8_t cosAlpha);
+        void     getabstandlinks(uint16_t analogwert, uint8_t cosAlpha);
+
+        void     regelungtechnik(void);
+
+        int8_t   getFahr(void);
+        int8_t   getServo(void);
+        uint16_t get_abstandvorne(void);
+        uint16_t get_abstandrechts(void);
+        uint16_t get_abstandlinks(void);
+    """)
+
+    # DLL-Pfad aus config_interface.txt (liegt neben dieser Datei)
+    def get_dll_path() -> str:
+        config_path = os.path.join(os.path.dirname(__file__), "config_interface.txt")
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("DLL_PATH="):
+                        return line.strip().split("=", 1)[1]
+        except Exception as e:
+            print("Fehler beim Laden des DLL-Pfads:", e)
+        return ""
+
+    _dll_path = get_dll_path()
+    if not _dll_path:
+        raise OSError("DLL-Pfad konnte nicht aus config_interface.txt geladen werden.")
+    lib = ffi.dlopen(_dll_path)
+
+# --- Sim/Regelungs-Parameter ---
 f = car.f
 WIDTH = 1920 * f
 HEIGHT = 1080 * f
 
 # Regelungsparameter (werden ggf. überschrieben)
 k1 = 1.1
-k2 = 1.10000001
+k2 = 1.1
 k3 = 1.1
 kp1 = 1.1
 kp2 = 1.1
 
-# --- CFFI DLL Setup ---
-ffi = cffi.FFI()
-ffi.cdef("""
-    void fahr(int f);
-    int getfwert();
-    void servo(int s);
-    int getswert();
-    void getfahr(int8_t leistung);
-    void regelungtechnik();
-    void getabstandvorne(uint16_t anlagwort);
-    void getabstandrechts(uint16_t anlagwort,uint8_t cosAlpha);
-    void getabstandlinks(uint16_t anlagwort, uint8_t cosAlpha);
-    uint16_t get_abstandvorne();
-    uint16_t get_abstandrechts();
-    uint16_t get_abstandlinks();
-    int8_t getServo();
-    void getservo(int8_t winkel);
-""")
-
-# Lade DLL Pfad aus config_interface.txt (im selben Ordner wie diese Datei)
-def get_dll_path():
-    config_path = os.path.join(os.path.dirname(__file__), "config_interface.txt")
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("DLL_PATH="):
-                    return line.strip().split("=", 1)[1]
-    except Exception as e:
-        print("Fehler beim Laden des DLL-Pfads:", e)
-    return ""
-
-dll_path = get_dll_path()
-if not dll_path:
-    raise OSError("DLL-Pfad konnte nicht aus config_interface.txt geladen werden.")
-lib = ffi.dlopen(dll_path)
-
 
 class MyInterface(ABC):
     @abstractmethod
-    def regelungtechnik_c(self): pass
+    def regelungtechnik_c(self): 
+        pass
 
     @abstractmethod
-    def regelungtechnik_python(self): pass
+    def regelungtechnik_python(self): 
+        pass
 
 
 class Interface(MyInterface):
