@@ -1,0 +1,20 @@
+#import pytest
+#from src.py.simulation import run_simulation
+
+#def test_run_simulation_exists():
+    # Test nur: Funktion ist da und aufrufbar
+ #   assert callable(run_simulation)
+
+#def test_run_simulation_does_not_crash(monkeypatch):
+ #   # Wir wollen nicht, dass pygame-Fenster geöffnet werden,
+  #  # daher patchen wir das Verhalten so, dass die Funktion frühzeitig abbricht.
+   # monkeypatch.setattr("src.py.simulation.pygame.quit", lambda: None)
+    #monkeypatch.setattr("src.py.simulation.pygame.display.set_mode", lambda *a, **k: None)
+   # monkeypatch.setattr("src.py.simulation.pygame.init", lambda: None)
+
+    # Versuch: Simulation starten (ohne echte Endlosschleife)
+    # Dazu musst du in simulation.py evtl. eine Abbruchbedingung einbauen.
+    #try:
+    #    run_simulation()
+    #except Exception as e:
+    #    pytest.fail(f"run_simulation crashed: {e}")
