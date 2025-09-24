@@ -3,7 +3,7 @@
 # Projektanpassung durch eigene Erweiterung für CARSim
 
 import neat
-from simulation import run_simulation
+from src.crazycar.sim.simulation import run_simulation
 from neat.six_util import iteritems
 
 # ------------------------------------------------------------------------------

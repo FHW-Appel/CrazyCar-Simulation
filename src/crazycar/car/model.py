@@ -1,7 +1,10 @@
+# crazycar/car/model.py
+# Fahrzeugmodell und Hilfsfunktionen für CrazyCar-Simulation
 import math
 import os
 import pygame
 import numpy as np
+from importlib import resources  # robustes Laden aus Paket-Assets
 
 f = 1
 
@@ -41,8 +44,9 @@ def set_position(self, position):
 class Car:
     def __init__(self, position, carangle, power, speed_set, radars, bit_volt_wert_list, distance, time):
         # Car-Sprite laden (mit Alpha) und skalieren
-        CAR_IMAGE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "car.png")
-        img = pygame.image.load(CAR_IMAGE_PATH).convert_alpha()
+        # Erwartet: car.png liegt in crazycar/assets/
+        CAR_IMAGE_PATH = resources.files("crazycar.assets") / "car.png"
+        img = pygame.image.load(str(CAR_IMAGE_PATH)).convert_alpha()
         self.sprite = pygame.transform.scale(img, (CAR_cover_size, CAR_cover_size))
         self.rotated_sprite = self.sprite
 

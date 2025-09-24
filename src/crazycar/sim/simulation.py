@@ -9,9 +9,16 @@ import pygame
 import pygame.freetype
 import pickle
 
-from car import Car, WIDTH, HEIGHT, f, sim_to_real
-from interface import Interface
-from toggle_button import ToggleButton
+# alt:
+# from src.crazycar.car.model import Car, WIDTH, HEIGHT, f, sim_to_real
+# from interface import Interface
+# from src.crazycar.sim.toggle_button import ToggleButton
+
+# neu:
+from ..car.model import Car, WIDTH, HEIGHT, f, sim_to_real
+from ..control.interface import Interface 
+from .toggle_button import ToggleButton
+
 
 # --- Globale Sim-Parameter ---
 window_size = (WIDTH, HEIGHT)
@@ -92,7 +99,7 @@ time_printed = False
 
 def run_simulation(genomes, config):
     """NEAT Callback: führt 1 Simulationslauf aus."""
-    map_path = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "Racemap.png")
+    map_path = os.path.join(os.path.dirname(__file__), "..", "assets", "Racemap.png")
 
     nets = []
     cars: List[Car] = []

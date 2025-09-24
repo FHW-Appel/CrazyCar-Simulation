@@ -1,65 +1,24 @@
-import pygame
 import math
-import time
+import pygame
 from abc import ABC, abstractmethod
-import os
-import car
 
-# --- Versuch: natives CFFI-Modul laden (bevorzugt) ---
+from crazycar.car import model  # neues Paket-Layout
+
+# --- Native-Modul laden (bevorzugt). Fallback: Python-Regelung ---
 try:
-    from carsim_native import ffi, lib  # aus build_native.py gebautes *.pyd
+    # aus build_native.py gebautes *.pyd (muss im Importpfad liegen)
+    from carsim_native import ffi, lib
     _NATIVE_OK = True
 except Exception:
+    ffi = None
+    lib = None
     _NATIVE_OK = False
-    import cffi
-    ffi = cffi.FFI()
-
-    # Signaturen müssen exakt zu den C-Headern passen
-    ffi.cdef(r"""
-        void     fahr(int f);
-        int      getfwert(void);
-        void     servo(int s);
-        int      getswert(void);
-
-        void     getfahr(int8_t leistung);
-        void     getservo(int8_t winkel);
-
-        void     getabstandvorne(uint16_t analogwert);
-        void     getabstandrechts(uint16_t analogwert, uint8_t cosAlpha);
-        void     getabstandlinks(uint16_t analogwert, uint8_t cosAlpha);
-
-        void     regelungtechnik(void);
-
-        int8_t   getFahr(void);
-        int8_t   getServo(void);
-        uint16_t get_abstandvorne(void);
-        uint16_t get_abstandrechts(void);
-        uint16_t get_abstandlinks(void);
-    """)
-
-    # DLL-Pfad aus config_interface.txt (liegt neben dieser Datei)
-    def get_dll_path() -> str:
-        config_path = os.path.join(os.path.dirname(__file__), "config_interface.txt")
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.startswith("DLL_PATH="):
-                        return line.strip().split("=", 1)[1]
-        except Exception as e:
-            print("Fehler beim Laden des DLL-Pfads:", e)
-        return ""
-
-    _dll_path = get_dll_path()
-    if not _dll_path:
-        raise OSError("DLL-Pfad konnte nicht aus config_interface.txt geladen werden.")
-    lib = ffi.dlopen(_dll_path)
 
 # --- Sim/Regelungs-Parameter ---
-f = car.f
-WIDTH = 1920 * f
-HEIGHT = 1080 * f
+WIDTH = model.WIDTH
+HEIGHT = model.HEIGHT
 
-# Regelungsparameter (werden ggf. überschrieben)
+# Regelungsparameter (können extern überschrieben werden)
 k1 = 1.1
 k2 = 1.1
 k3 = 1.1
@@ -68,39 +27,49 @@ kp2 = 1.1
 
 
 class MyInterface(ABC):
+    @staticmethod
     @abstractmethod
-    def regelungtechnik_c(self): 
-        pass
+    def regelungtechnik_c(cars):
+        ...
 
+    @staticmethod
     @abstractmethod
-    def regelungtechnik_python(self): 
-        pass
+    def regelungtechnik_python(cars):
+        ...
 
 
 class Interface(MyInterface):
 
     @staticmethod
     def regelungtechnik_c(cars):
+        # Wenn kein natives Modul verfügbar ist -> direkt Python-Regelung nutzen
+        if not _NATIVE_OK or lib is None:
+            return Interface.regelungtechnik_python(cars)
+
         for car in cars:
-            if car.radars_enable and car.regelung_enable:
+            if car.radars_enable and car.regelung_enable and car.bit_volt_wert_list and len(car.bit_volt_wert_list) >= 3:
+                # Eingänge an Regler übergeben
                 lib.getfahr(int(car.power))
                 lib.getservo(int(car.radangle))
 
-                anlagewertrechts = car.bit_volt_wert_list[0][0]
-                anlagewertvorne = car.bit_volt_wert_list[1][0]
-                anlagewertlinks = car.bit_volt_wert_list[2][0]
+                anlagewertrechts = int(car.bit_volt_wert_list[0][0])
+                anlagewertvorne  = int(car.bit_volt_wert_list[1][0])
+                anlagewertlinks  = int(car.bit_volt_wert_list[2][0])
 
                 radians = math.radians(car.radar_angle)
                 cosAlpha = int(math.cos(radians) * 10)
 
                 lib.getabstandvorne(anlagewertvorne)
                 lib.getabstandrechts(anlagewertrechts, cosAlpha)
-                lib.getabstandlinks(anlagewertlinks, cosAlpha)
+                lib.getabstandlinks(anlagewertlinks,  cosAlpha)
 
                 lib.regelungtechnik()
-                car.fwert = lib.getfwert()
-                car.swert = lib.getswert()
 
+                # Ausgänge lesen
+                car.fwert = int(lib.getfwert())
+                car.swert = int(lib.getswert())
+
+            # Stellgrößen auf Fahrzeug anwenden
             car.radangle = -car.servo2IstWinkel(car.getwinkel(car.swert))
             car.getmotorleistung(car.fwert)
             car.speed = car.Geschwindigkeit(car.power)
@@ -108,16 +77,16 @@ class Interface(MyInterface):
     @staticmethod
     def regelungtechnik_python(cars):
         for car in cars:
-            if car.radars_enable and car.regelung_enable:
-                distcm = [sim_to_real(px) for px in car.radar_dist]
+            if car.radars_enable and car.regelung_enable and car.radar_dist and len(car.radar_dist) >= 3:
+                distcm = [model.sim_to_real(px) for px in car.radar_dist]
 
-                # Richtung
+                # Richtung (Seitenabstand ausgleichen)
                 if distcm[0] < 130 or distcm[2] < 130:
                     sollwert4 = 0
                     diff = distcm[2] - distcm[0]
                     car.swert = -((diff - sollwert4) * kp2)
 
-                # Geschwindigkeit
+                # Geschwindigkeit (einfacher P-Regler in drei Bereichen)
                 sollwert1 = distcm[1] * k1
                 sollwert2 = distcm[1] * k2
                 sollwert3 = distcm[1] * k3
@@ -136,6 +105,7 @@ class Interface(MyInterface):
                     car.fwert = -(sollwert3 - distcm[1]) * kp1 - 18
                     car.swert = -(distcm[0] - distcm[2]) * kp2 - 10
 
+            # Stellgrößen auf Fahrzeug anwenden
             car.radangle = -car.servo2IstWinkel(car.getwinkel(car.swert))
             car.getmotorleistung(car.fwert)
             car.speed = car.Geschwindigkeit(car.power)
@@ -169,20 +139,18 @@ class Interface(MyInterface):
 
     @staticmethod
     def getabstandvorne1():
-        return lib.get_abstandvorne()
+        if _NATIVE_OK and lib is not None:
+            return lib.get_abstandvorne()
+        return 0
 
     @staticmethod
     def getabstandlinks1():
-        return lib.get_abstandlinks()
+        if _NATIVE_OK and lib is not None:
+            return lib.get_abstandlinks()
+        return 0
 
     @staticmethod
     def getabstandrechts1():
-        return lib.get_abstandrechts()
-
-
-# --- Hilfsfunktionen ---
-def sim_to_real(simpx):
-    return (simpx * 1900) / WIDTH
-
-def real_to_sim(realcm):
-    return realcm * WIDTH / 1900
+        if _NATIVE_OK and lib is not None:
+            return lib.get_abstandrechts()
+        return 0
