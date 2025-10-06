@@ -1,7 +1,7 @@
 # build_native.py
 from cffi import FFI
 from pathlib import Path
-from importlib.machinery import EXTENSION_SUFFIXES  # <- liefert z.B. ".cp313-win_amd64.pyd"
+from importlib.machinery import EXTENSION_SUFFIXES
 
 ROOT = Path(__file__).resolve().parent
 SRC_C = ROOT / "src" / "c"
@@ -25,8 +25,9 @@ ffi.cdef(r"""
     uint16_t get_abstandlinks(void);
 """)
 
+# WICHTIG: qualifizierter Modulname innerhalb des Pakets
 ffi.set_source(
-    "carsim_native",
+    "crazycar.carsim_native",              # <— Paketname + Modul
     r"""
     #include "if.h"
     #include "mf.h"
@@ -36,9 +37,9 @@ ffi.set_source(
 )
 
 if __name__ == "__main__":
-    # korrektes Extension-Suffix (z.B. ".cp313-win_amd64.pyd")
     suffix = EXTENSION_SUFFIXES[0]
-    target_path = ROOT / "src" / "py" / f"carsim_native{suffix}"
+    # Artefakt direkt in das Paketverzeichnis legen:
+    target_path = ROOT / "src" / "crazycar" / f"carsim_native{suffix}"
 
     (ROOT / "build" / "_cffi").mkdir(parents=True, exist_ok=True)
 
