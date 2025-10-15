@@ -1,28 +1,53 @@
-# --- Backcompat: compute_corners(x, y, heading, length, width, unit_scale)
-import math as _gm
-_compute_corners_prev = locals().get("compute_corners", None)
+# src/crazycar/car/geometry.py
+from __future__ import annotations
+from math import cos, sin, radians
+from typing import List, Tuple
 
-def _compute_corners_rect__bb(x, y, heading, length, width, unit_scale=1.0):
+Point = tuple[float, float]
+
+def compute_corners(
+    x: float,
+    y: float,
+    heading: float,
+    length: float,
+    width: float,
+    unit_scale: float = 1.0,
+    *,
+    degrees: bool = False,
+) -> List[Point]:
+    """
+    Liefert die 4 Eckpunkte eines Rechtecks (Fahrzeug), dessen Mittelpunkt bei (x, y) liegt.
+
+    Parameter
+    ---------
+    x, y        : Mittelpunkt (Pixel oder beliebige Einheiten)
+    heading     : Ausrichtung (Standard: Radiant; `degrees=True` für Grad)
+    length      : Fahrzeuglänge (wird mit `unit_scale` skaliert)
+    width       : Fahrzeugbreite (wird mit `unit_scale` skaliert)
+    unit_scale  : Skala (z. B. cm→px). Default 1.0.
+    degrees     : Wenn True, ist `heading` in Grad; sonst Radiant.
+
+    Rückgabe
+    --------
+    Liste aus 4 Punkten [(x1,y1), (x2,y2), (x3,y3), (x4,y4)].
+    Reihenfolge bei heading=0: [(-L/2,-W/2), (L/2,-W/2), (L/2,W/2), (-L/2,W/2)] um (x,y) rotiert.
+    """
+    if degrees:
+        heading = radians(heading)
+
     L = float(length) * float(unit_scale)
     W = float(width)  * float(unit_scale)
-    hx, hy = L/2.0, W/2.0
-    pts = [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
-    if abs(heading) > 1e-12:
-        c, s = _gm.cos(heading), _gm.sin(heading)
-        pts = [(px*c - py*s, px*s + py*c) for (px, py) in pts]
-    return [(x + px, y + py) for (px, py) in pts]
+    hx, hy = L / 2.0, W / 2.0
 
-def compute_corners(*args, **kwargs):
-    if (len(args) >= 5) or ({'length','width'} & set(kwargs)):
-        if len(args) >= 5:
-            x, y, heading, length, width = args[:5]
-            unit_scale = args[5] if len(args) >= 6 else kwargs.get("unit_scale", 1.0)
-        else:
-            x = kwargs.get("x"); y = kwargs.get("y")
-            heading = kwargs.get("heading", 0.0)
-            length = kwargs["length"]; width = kwargs["width"]
-            unit_scale = kwargs.get("unit_scale", 1.0)
-        return _compute_corners_rect__bb(x, y, heading, length, width, unit_scale)
-    if _compute_corners_prev is not None:
-        return _compute_corners_prev(*args, **kwargs)
-    raise TypeError("compute_corners called with unexpected signature")
+    # Lokale Eckpunkte (Body-Frame, heading=0)
+    local = [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
+
+    c, s = cos(heading), sin(heading)
+    world = []
+    for px, py in local:
+        rx = px * c - py * s
+        ry = px * s + py * c
+        world.append((x + rx, y + ry))
+    return world
+
+__all__ = ["compute_corners", "Point"]

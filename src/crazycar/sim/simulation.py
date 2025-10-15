@@ -54,15 +54,15 @@ def _finalize_exit() -> None:
     """
     Zentraler Exit-Helfer:
     - pygame.quit()
-    - Entweder os._exit(0) (standard; nicht abfangbar) ODER SystemExit (per Env).
+    - Entweder sys.exit(0) (standard; nicht abfangbar) ODER SystemExit (per Env).
     """
     log.info("Harter Exit → pygame.quit() + %s",
-             "os._exit(0)" if _HARD_KILL else "SystemExit(0)")
+             "sys.exit(0)" if _HARD_KILL else "SystemExit(0)")
     try:
         pygame.quit()
     finally:
         if _HARD_KILL:
-            os._exit(0)        # garantiertes Ende des Prozesses
+            sys.exit(0)        # garantiertes Ende des Prozesses
         else:
             raise SystemExit(0) # weiches Ende (kann abgefangen werden)
 
