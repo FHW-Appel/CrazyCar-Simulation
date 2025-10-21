@@ -4,8 +4,9 @@ import os
 import sys
 import logging
 from pathlib import Path
+from typing import Any, Dict
 
-# Einfacher Debug-Schalter: 0 = aus, 1 = an 
+# Einfacher Debug-Schalter: 0 = aus, 1 = an
 DEBUG_DEFAULT = 0
 
 _THIS = Path(__file__).resolve()
@@ -76,6 +77,17 @@ def _install_pygame_quit_guard() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _print_result(res: Dict[str, Any]) -> None:
+    """Formatiert die Ausgabe der Optimierungsergebnisse."""
+    print("Optimierte Parameter:")
+    print(f"K1:  {res['k1']}")
+    print(f"K2:  {res['k2']}")
+    print(f"K3:  {res['k3']}")
+    print(f"KP1: {res['kp1']}")
+    print(f"KP2: {res['kp2']}")
+    print(f"Optimale Rundenzeit: {res['optimal_lap_time']}")
+
+
 def main() -> int:
     """Haupteinstiegspunkt für CrazyCar."""
     # Debug initialisieren (nur über den Schalter oben)
@@ -101,26 +113,46 @@ def main() -> int:
             if build_out_dir and build_out_dir not in sys.path:
                 sys.path.insert(0, build_out_dir)
                 print("[sys.path add build]", build_out_dir)
-            os.environ["CRAZYCAR_NATIVE_PATH"] = build_out_dir
+            os.environ["CRAZYCAR_NATIVE_PATH"] = build_out_dir or ""
     except Exception as e:
         print(f"[ERROR] Native Build Exception: {e}")
 
     # -----------------------------------------------------------------------
     # Optimierer starten (nach erfolgreichem Build)
     # -----------------------------------------------------------------------
-    from crazycar.control.optimizer import run_optimization
+    # HINWEIS: Import jetzt direkt aus optimizer_api, damit optimizer.py entfallen kann.
+    from crazycar.control.optimizer_api import run_optimization
 
     # Quit-Guard erst JETZT aktivieren – Pygame ist ab hier relevant
     _install_pygame_quit_guard()
 
-    res = run_optimization()
-    print("Optimierte Parameter:")
-    print(f"K1: {res['k1']}")
-    print(f"K2: {res['k2']}")
-    print(f"K3: {res['k3']}")
-    print(f"Kp1: {res['kp1']}")
-    print(f"Kp2: {res['kp2']}")
-    print(f"Optimale Rundenzeit: {res['optimal_lap_time']}")
+    try:
+        res = run_optimization()
+    except KeyboardInterrupt:
+        # Sauber abbrechen ohne langen Traceback (STRG+C)
+        print("\n[main] Abgebrochen (Ctrl+C).")
+        return 130
+    except SystemExit as se:
+        # Falls der Quit-Guard im Parent greift (unüblich), Exit-Code respektieren
+        return int(getattr(se, "code", 0) or 0)
+    except Exception as e:
+        logging.exception("Unerwarteter Fehler während der Optimierung: %r", e)
+        print("[optimizer] Unerwarteter Fehler:", e)
+        return 1
+
+    # Ergebnis robust auswerten
+    if not isinstance(res, dict):
+        print("[optimizer] Ungültige Rückgabe (kein Dict).")
+        return 1
+
+    if not res.get("success", False):
+        # Abbruchpfad (z. B. ESC aus der Simulation)
+        msg = res.get("message", "Abgebrochen.")
+        print("[optimizer] Abbruch oder Fehler:", msg)
+        return 0
+
+    # Erfolg → Parameter ausgeben
+    _print_result(res)
     return 0
 
 
