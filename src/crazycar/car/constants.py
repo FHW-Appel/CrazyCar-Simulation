@@ -16,9 +16,9 @@ log = logging.getLogger("crazycar.constants")
 # ------------------------------------------------------------
 # Bildschirm-/Skalierungsfaktoren
 # ------------------------------------------------------------
-f: float = 1
-WIDTH: int  = int(1600 * f)
-HEIGHT: int = int(900 * f)
+f: float = 0.8
+WIDTH: int  = int(1920 * f)
+HEIGHT: int = int(1080 * f)
 
 # ------------------------------------------------------------
 # Farben (werden von model/simulation genutzt)
