@@ -1,6 +1,7 @@
 # src/crazycar/interop/build_tools.py
 from __future__ import annotations
 import sys
+import os
 from pathlib import Path
 from cffi import FFI
 import sysconfig
@@ -19,6 +20,7 @@ def run_build_native():
     Gibt (rc, sys_path_dir) zurück – sys_path_dir vor Import in sys.path legen.
     """
     OUT_PKG.mkdir(parents=True, exist_ok=True)
+    OUT_BASE.mkdir(parents=True, exist_ok=True)
 
     ffi = FFI()
 
@@ -43,16 +45,20 @@ def run_build_native():
 
     # Ziel-Datei (unter build/_cffi/crazycar/)
     ext_suffix = sysconfig.get_config_var("EXT_SUFFIX")  # z.B. .cp313-win_amd64.pyd
+    if not ext_suffix:
+        # Fallback zur Sicherheit
+        from importlib.machinery import EXTENSION_SUFFIXES
+        ext_suffix = EXTENSION_SUFFIXES[0]
     target_file = OUT_PKG / f"carsim_native{ext_suffix}"
 
-    # Quellen: genau die 4 Sim-Files (dllmain.c nur auf Windows)
+    # Quellen: genau die 3 Sim-Files 
     sources = [
         str(C_DIR / "sim_globals.c"),
         str(C_DIR / "cc-lib.c"),
         str(C_DIR / "myFunktions.c"),
     ]
-    if sys.platform.startswith("win"):
-        sources.append(str(C_DIR / "dllmain.c"))
+
+
 
     ffi.set_source(
         f"{PKG}.carsim_native",
@@ -62,7 +68,7 @@ def run_build_native():
         """,
         sources=sources,
         include_dirs=[str(C_DIR)],
-        define_macros=[("CC_EXPORTS", None)],  # harmless auch wenn dein Header direkt __declspec benutzt
+        define_macros=[("CC_EXPORTS", None)],  # harmless auch wenn Header __declspec nutzt
         extra_compile_args=[],
         extra_link_args=[],
     )

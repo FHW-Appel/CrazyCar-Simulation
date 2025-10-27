@@ -39,7 +39,7 @@ WIDTH = model.WIDTH
 HEIGHT = model.HEIGHT
 
 # Diese Werte kann dein Optimizer überschreiben (per Dateiedit)
-k1 = 1.10000001
+k1 = 1.1
 k2 = 1.1
 k3 = 1.1
 kp1 = 1.1

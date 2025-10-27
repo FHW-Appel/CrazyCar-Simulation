@@ -18,7 +18,7 @@ sources = [
     str(SRC_C / "cc-lib.c"),
     str(SRC_C / "myFunktions.c"),
 ]
-# Hinweis: Für die Python-Extension KEIN dllmain.c nötig!
+
 # Wenn du zusätzlich eine echte DLL bauen willst, behandle das in einem separaten Build.
 
 ffi.set_source(
