@@ -1,4 +1,4 @@
-# crazycar/simulation/runner.py
+# crazycar/sim/simulation.py
 # Hinweis:
 # - Pygame wird NICHT mehr auf Modulebene initialisiert → verhindert Doppel-Fenster.
 # - Alles UI-Setup passiert lazy in run_simulation().
