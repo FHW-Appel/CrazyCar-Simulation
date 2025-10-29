@@ -4,6 +4,14 @@ import os
 import math
 import logging
 
+"""Der Orchestrator und die eigentliche Car-Klasse. 
+    Car.update(surface, drawtracks, sensors_on, collision_mode) holt 
+    sich Sensordaten, berechnet Lenk-/Fahrdynamik, prüft Kollisionen 
+    und aktualisiert Position, Car.draw(screen) rendert Sprite, Sensoren 
+    und optional Spuren. Hilfsfunktionen wie is_alive(), get_round_time(), 
+    Geschwindigkeit(power) (vereinfachte Längsdynamik), sowie Properties für Distanz, Zeiten, 
+    aktuelle Radar-Listen und Regler-I/Os binden die oben genannten Module zusammen."""
+
 from . import constants as C
 from .constants import (
     init_pixels, f, WIDTH, HEIGHT,

@@ -4,6 +4,12 @@
 - Radare sammeln über einen Winkelbereich
 - Distanzen extrahieren
 - DA-Linearisierung (Bit/Volt) wie im Originalcode
+
+Simuliert die Abstandssensoren. cast_radars(surface, center, angle, spec) 
+feuert die Sensorstrahlen in die Karte und ermittelt Treffpunkte und Distanzen, 
+px_to_volt(px) linearisiert eine Pixel-Distanz zu einer “Analogspannung”, und 
+digits_from_volt(v) macht daraus die “Digitalbits”. Ergebnis sind Listen aus 
+Radar-Treffern, Distanzen und A/D-Werten für den Regler.
 """
 
 from __future__ import annotations

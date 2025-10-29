@@ -4,6 +4,12 @@ import os
 import logging
 from typing import Callable, Iterable, Tuple, Optional, Dict, Any
 
+""" Erkennt Berührungen mit Streckenrand und Ziellinie. hit_border(surface, corners,
+     border_color) prüft, ob das Fahrzeug in verbotene Farben/Pixel fährt, 
+    crossed_finish(prev_pos, pos, finish_segment) erkennt Ziellinien-Übertritt 
+    (z. B. für Rundenzeiten). Liefert boolsche Flags, die die Simulation auswertet."""
+
+
 Color = Tuple[int, int, int, int]
 Point = Tuple[float, float]
 ColorAtFn = Callable[[Tuple[int, int]], Color]

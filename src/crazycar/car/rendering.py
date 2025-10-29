@@ -6,6 +6,23 @@ from typing import List, Tuple
 from pathlib import Path
 import pygame
 
+"""
+Rendering-Hilfsfunktionen für CrazyCar.
+
+Funktionen:
+- load_car_sprite(cover_size): Lädt assets/car.png, normalisiert Größe (>=16px), skaliert; Fallback: Platzhalter; Logging.
+- rotate_center(image, angle): Rotiert um Bildmitte und beschneidet auf Originalmaß → Top-Left bleibt stabil.
+- draw_car(screen, sprite, position): Zeichnet Sprite; bei CRAZYCAR_DEBUG mit rotem Rahmen.
+- draw_radar(screen, center, radars, enabled): Sensorstrahlen + Endpunkte (Debug/Visualisierung).
+- draw_track(screen, left_rad, right_rad, corners): Debug-Punkte für Track-/Rand-Erkennung.
+
+Interne Helfer:
+- _normalize_size(), _make_placeholder(), _assets_dir() (Assets liegen unter src/crazycar/assets/)
+
+Typalias:
+- Point = Tuple[float, float]
+"""
+
 # Logging
 if not logging.getLogger().handlers:
     logging.basicConfig(

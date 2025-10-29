@@ -1,9 +1,29 @@
 # crazycar/car/state.py
-"""Zustandsträger für das Fahrzeug (pygame-frei). Keine Logik, nur Daten."""
+
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple
+
+"""
+Datenklasse für den Fahrzeugzustand (pygame-frei, reine Daten).
+
+Felder (Einheiten & Bedeutung):
+- position: [x, y] in px (Top-Left), center: [cx, cy] in px
+- carangle: ° (0 = rechts, Uhrzeigersinn +), radangle: °
+- speed: px/step, power: Throttle (−max … +max)
+- time: s, distance: px, round_time: s
+- corners: List[Point] (Sprite-Ecken), left_rad/right_rad: Rand-/Referenzpunkte
+- alive, finished, regelung_enable: Laufzeit-Flags
+- Sensorik:
+  - radar_angle: ° Öffnungswinkel
+  - radars: List[(Point, int)] → (Endpunkt, Distanz)
+  - radar_dist: List[int] → Distanzen je Strahl
+  - bit_volt_wert_list: List[(ADC-Bits, Volt)]
+
+Hinweis: Keine Logik; Mutationen/Updates erfolgen in Motion/Sensor-Modulen.
+"""
+
 
 Point = Tuple[float, float]
 Radar = Tuple[Point, int]

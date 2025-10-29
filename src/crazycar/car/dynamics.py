@@ -8,6 +8,12 @@ Abbildungen aus dem Original:
 Hinweise:
 - Rechnet intern in Realwerten (cm/s) und konvertiert über units.py.
 - Zeitinkrement dt ist standardmäßig 0.01 (wie im Originalcode).
+
+Kümmert sich um Geschwindigkeit, Beschleunigung und Dämpfung. 
+apply_power(power, v, dt, drag, vmax) aktualisiert die Geschwindigkeit 
+mit einfacher Luft-/Rollreibung und einem Maximalwert, accel_from_power(power) 
+gibt die momentane Beschleunigung zurück. 
+Das Modul bildet die einfache Längsdynamik des Fahrzeugs.
 """
 
 from __future__ import annotations

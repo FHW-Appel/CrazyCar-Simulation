@@ -3,6 +3,10 @@ from __future__ import annotations
 import os
 import logging
 
+"""Bündelt alle festen Simulations- und Fahrzeugparameter. 
+    Hier stehen Fenstergröße (WIDTH, HEIGHT), der globale Skalierungsfaktor f,
+    Farbdefinitionen (COLORS), Fahrzeugmaße (CAR), Sensor-Layout (SENSOR), einfache Physik-Grenzen (PHYS) sowie die Ziellinie (FINISH_LINE). Nichts “lebt” hier—es sind reine Konstanten, die die übrigen Module konfigurieren."""
+
 # ------------------------------------------------------------
 # Logging
 # ------------------------------------------------------------

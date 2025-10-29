@@ -4,7 +4,13 @@ import math
 from typing import Callable, Tuple
 import numpy as np
 
+"""Berechnet ein “Abprallen” nach Kollision. compute_rebound(vel, normal, damping) 
+    spiegelt die Geschwindigkeit an der Kollisionsnormalen und dämpft sie, separate_from_wall(center, normal, depth) 
+    schiebt das Fahrzeug minimal aus der Wand heraus. 
+    Damit lassen sich weiche Crash-Reaktionen modellieren (alternativ zu “sofort stoppen”)."""
+
 Color = Tuple[int, int, int,  int]
+
 Point = Tuple[float, float]
 ColorAtFn = Callable[[Tuple[int, int]], Color]
 

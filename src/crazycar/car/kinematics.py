@@ -1,15 +1,18 @@
 # crazycar/car/kinematics.py
-"""Fahrzeugkinematik: Lenkung -> Kursänderung (pygame-frei).
-
-Dieses Modul kapselt die Berechnung, wie sich der Fahrzeugwinkel (carangle)
-bei gegebenem Lenkwinkel (radangle) und Geschwindigkeit ändert.
-"""
-
 from __future__ import annotations
 import math
 import os
 import logging
 from typing import Final
+
+
+"""Setzt Lenkbefehle in Kursänderungen um. 
+    steer_to_heading(heading, steer_deg, dt) integriert den Lenkeinschlag
+    über die Zeit, clamp_heading(angle) hält den Winkel im [-π, π]-Bereich, 
+    und turn_radius(steer_deg, wheelbase) liefert den geometrischen Wendekreis. 
+    Hier passiert die reine “Bewegungsgeometrie”, ohne Kräfte.
+"""
+
 
 # ------------------------------------------------------------
 # Logging

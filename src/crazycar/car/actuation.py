@@ -1,8 +1,11 @@
 # crazycar/car/actuation.py
-"""Aktorik/Ansteuerung: Lenkwinkel- und Motor-/Rückwärtslogik (pygame-frei)."""
-
 from __future__ import annotations
 from typing import Callable, Tuple
+
+"""Übersetzt Regler-Outputs in Aktorik. servo_to_angle(servo) 
+    wandelt einen Servowert (z. B. −100…+100) in einen Lenkwinkel in Grad, clip_steer(servo) begrenzt zulässige Ausschläge, 
+    und motor_power_step(power, target) führt Power auf ein Ziel zu (sanfter Rampen-Effekt).
+    Das ist die Brücke zwischen Regler und Physik."""
 
 # Typ für eine Geschwindigkeitsfunktion, die (z. B. aus model.Car) die aktuelle
 # Fahrzeug-Geschwindigkeit aus einem Power-Wert berechnet.

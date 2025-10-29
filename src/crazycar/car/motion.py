@@ -6,6 +6,11 @@ import logging
 from crazycar.car.constants import f, WIDTH, HEIGHT, CAR_cover_size, CAR_Radstand, CAR_Spurweite
 from crazycar.car.kinematics import steer_step
 
+"""Das Modul aktualisiert in jedem Sim-Tick die Fahrzeugbewegung. 
+    step_motion(state) nimmt deinen aktuellen Fahrzeug-state 
+    (Position, Winkel, Geschwindigkeit, Lenkung …) und rechnet daraus die neue Pose aus – mit 
+    einfacher Kinematik, Screen-Grenzen und optionalem Debug-Logging"""
+
 if not logging.getLogger().handlers:
     logging.basicConfig(
         level=logging.DEBUG if os.getenv("CRAZYCAR_DEBUG") == "1" else logging.INFO,
