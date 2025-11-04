@@ -10,8 +10,13 @@ ROOT = Path(__file__).resolve().parents[3]   # .../CrazyCar-Simulation
 SRC  = ROOT / "src"
 PKG  = "crazycar"
 
+<<<<<<< HEAD
 C_DIR    = SRC / "c"                         # enthält cc-lib.h, myFunktions.h, *.c
 OUT_BASE = ROOT / "build" / "_cffi"
+=======
+C_DIR = SRC / "c"                              
+OUT_BASE = ROOT / "build" / "_cffi"            
+>>>>>>> feature/refactor-simulation
 OUT_PKG  = OUT_BASE / PKG
 
 def run_build_native():
@@ -24,7 +29,11 @@ def run_build_native():
 
     ffi = FFI()
 
+<<<<<<< HEAD
     # Öffentliche C-API (entspricht cc-lib.h)
+=======
+    # 1) cdef: nur das, was du aus Python nutzt
+>>>>>>> feature/refactor-simulation
     ffi.cdef(r"""
         void     fahr(int f);
         int      getfwert(void);

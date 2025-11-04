@@ -63,7 +63,13 @@
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
+<<<<<<< HEAD
   "files.associations": {
     "cc-lib.h": "c"
   }
+=======
+  "cSpell.words": [
+    "wirklich"
+  ]
+>>>>>>> feature/refactor-simulation
 }
