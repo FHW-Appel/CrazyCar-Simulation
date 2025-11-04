@@ -1,10 +1,9 @@
 /* myFunktions.c — Simulation (DLL), ohne AVR-Header
  *
  * Enthält:
- *  - fahren1(): dein Fahrverhalten (Integer/Festkomma statt Float)
- *  - linearisierungAD(): zentrale Linearisierung + cos-Korrektur (ANPASSPUNKT)
- *  - Wrapper: linearisierungVorne/Links/Rechts -> nutzen linearisierungAD()
- *  - P/I/D-Glieder (Integer)
+ *  - linearisierungAD() + Wrapper
+ *  - fahren1(): deine einfache Fahrlogik (wie im Beispiel)
+ *  - notwendige Helfer: mo(), lo()
  *  - Stubs: ro(), akkuSpannungPruefen(), ledSchalterTest()
  */
 
@@ -18,43 +17,30 @@ extern uint16_t abstandvorne;
 extern uint16_t abstandlinks;
 extern uint16_t abstandrechts;
 
-/* ===== Konstante Parameter Sind aus der Alten MyFunktions AnalogWerte (wie bisher, aber benannt) ===== */
-#define LINEAR_A         23962u   /* frühere Zahl Hyperbel */
+/* ===== Konstante Parameter für die Linearisierung ===== */
+#define LINEAR_A         23962u
 #define LINEAR_B         20u
 #define ADC_MIN_CLAMP    163u
 #define ADC_MAX_CLAMP    770u
 #define COS_0_DEG        100u     /* cos(0°) * 100 */
 
-/* Fahrverhalten-Faktoren (Festkomma statt Float): 1.09 -> 109/100; 0.99 -> 99/100 */
-#define K_109            109
-#define K_099             99
-
-/* ===== kleine Helfer ===== */
-static inline int16_t clamp_i16(int16_t v, int16_t lo, int16_t hi){
-    return (v < lo) ? lo : (v > hi) ? hi : v;
-}
-
 /* =========================================================================
- *  ZENTRALE LINEARISIERUNG (ANPASSPUNKT FÜR STUDIERENDE)
+ *  ZENTRALE LINEARISIERUNG
  *    abstand_cm = (LINEAR_A / (messwert + LINEAR_B)) / (cosAlpha/100)
- *    cosAlpha: cos(theta) * 100   (0° => 100, 45° ≈ 70)
  * ========================================================================= */
 uint16_t linearisierungAD(uint16_t messwert, uint8_t cosAlpha){
-    /* 1) clamp wie früher */
     if (messwert < ADC_MIN_CLAMP) messwert = ADC_MIN_CLAMP;
     if (messwert > ADC_MAX_CLAMP) messwert = ADC_MAX_CLAMP;
 
-    /* 2) Hyperbel */
     uint32_t cm = LINEAR_A / (uint32_t)(messwert + LINEAR_B);
 
-    /* 3) Schrägprojektion rückrechnen: /cos -> *100 / cosAlpha */
-    if (cosAlpha == 0) cosAlpha = 1;          /* Failsafe, /0 vermeiden */
+    if (cosAlpha == 0) cosAlpha = 1;  /* /0 vermeiden */
     cm = (cm * 100u) / (uint32_t)cosAlpha;
 
     return (uint16_t)cm;
 }
 
-/* ========= Alte API-Wrapper (bleiben 1:1 erhalten) ========= */
+/* ========= Alte API-Wrapper ========= */
 uint16_t linearisierungVorne(uint16_t analogwert){
     abstandvorne = linearisierungAD(analogwert, (uint8_t)COS_0_DEG);
     return abstandvorne;
@@ -68,79 +54,58 @@ uint16_t linearisierungRechts(uint16_t analogwert, uint8_t cosAlpha){
     return abstandrechts;
 }
 
-/* ================== Fahrverhalten (wie bisher) ================== */
+/* ========= Benötigte Regler-Helfer (wie in deinem Beispiel) ========= */
+int16_t lo(uint16_t w){
+    int16_t e; // Regelabweichung
+    int16_t u; // Stellgröße
+    int16_t y; // Regelgröße
+    const uint8_t Kpz = 3;
+    const uint8_t Kpn = 8;
+
+    y = (int16_t)abstandlinks;
+    e = (int16_t)w - y;
+    u = (int16_t)(e * (int16_t)Kpz) / (int16_t)Kpn;
+    return u;
+}
+
+int16_t mo(uint16_t w){
+    int16_t e; // Regelabweichung
+    int16_t u; // Stellgröße
+    int16_t y; // Regelgröße
+    const uint8_t Kpz = 3;
+    const uint8_t Kpn = 8;
+
+    y = (int16_t)abstandlinks - (int16_t)abstandrechts;
+    e = (int16_t)w - y;
+    u = (int16_t)(e * (int16_t)Kpz) / (int16_t)Kpn;
+    return u;
+}
+
+/* ========= Deine einfache Fahrlogik (1:1 übertragen) ========= */
 void fahren1(void){
-    /* Festkomma: 1.09 -> 109/100 ; 0.99 -> 99/100 */
-    const int16_t Kp_forw = K_109;
-    const int16_t Kp_mix  = K_099;
+    int8_t leistung = getFahr();
 
-    /* Sollwerte aus abstandvorne (entspricht deinem Code) */
-    int16_t sollwert1 = (int16_t)((int32_t)abstandvorne * Kp_forw / 100);
-    int16_t sollwert2 = (int16_t)((int32_t)abstandvorne * Kp_forw / 100);
-    int16_t sollwert3 = (int16_t)((int32_t)abstandvorne * Kp_forw / 100);
-    int16_t sollwert4 = 0;
-
-    int16_t diff     = (int16_t)abstandrechts - (int16_t)abstandlinks;
-    int8_t  leistung = getFahr();
-
-    /* Lenkung (wie vorher): (diff - sollwert4) * 0.99 */
+    if ( (abstandlinks  < 30 && leistung > 0) ||
+         (abstandvorne  < 30 && leistung > 0) ||
+         (abstandrechts < 30 && leistung > 0) ||
+         (abstandlinks  < 40 && leistung < 0) ||
+         (abstandvorne  < 40 && leistung < 0) ||
+         (abstandrechts < 40 && leistung < 0) )
     {
-        int16_t steer = (int16_t)((int32_t)(diff - sollwert4) * Kp_mix / 100);
-        servo(steer);
-    }
-
-    if (abstandvorne >= 100) {
-        if (leistung > 18 && leistung < 80) {
-            /* leistung + (sollwert1 - abstandvorne)*0.99 + 18 */
-            int16_t delta = (int16_t)((int32_t)(sollwert1 - (int16_t)abstandvorne) * Kp_mix / 100);
-            int16_t cmd   = (int16_t)leistung + delta + 18;
-            if (cmd > 80) cmd = 80;
-            fahr(cmd);
-        } else if (leistung < 0) {
-            fahr(20);
+        fahr(-20);
+        if (abstandlinks > abstandrechts){
+            servo(10);
+        } else {
+            servo(-10);
         }
-    }
-    else if (abstandvorne > 50 && abstandvorne < 100) {
-        if (leistung >= 18) {
-            /* leistung - (sollwert2 - abstandvorne)*0.99 */
-            int16_t delta = (int16_t)((int32_t)(sollwert2 - (int16_t)abstandvorne) * Kp_mix / 100);
-            int16_t cmd   = (int16_t)leistung - delta;
-            if (cmd < 18) cmd = 18;
-            fahr(cmd);
-        } else if (leistung < 0) {
-            fahr(20);
-        }
-    }
-
-    if (abstandvorne < 50 || ((abstandvorne < 80) && (leistung < -18))) {
-        /* (-1) * (sollwert3 - abstandvorne)*0.99 - 18 */
-        int16_t delta = (int16_t)((int32_t)(sollwert3 - (int16_t)abstandvorne) * Kp_mix / 100);
-        int16_t cmd   = (int16_t)(-delta) - 18;
-        fahr(cmd);
+    } else {
+        /* Geradeaus-Fall */
+        fahr(12);
+        servo(mo(0));
     }
 }
 
-/* ================== PID-Helfer ================== */
-int8_t Pglied(int8_t e, int8_t K){
-    /* y = K*e/100  (Integer) */
-    int16_t z = (int16_t)K * (int16_t)e;
-    return (int8_t)(z / 100);
-}
-int8_t Iglied(int8_t e, int8_t K, int8_t eAkkumuliert, int8_t eMax){
-    int16_t z = (int16_t)e + (int16_t)eAkkumuliert;
-    if (z >  eMax) z =  eMax;
-    if (z < -eMax) z = -eMax;
-    z = (int16_t)(z * K);
-    return (int8_t)(z / 100);
-}
-int8_t Dglied(int8_t eold, int8_t e, int8_t K){
-    int16_t z = (int16_t)e - (int16_t)eold;
-    z = z / 2;
-    z = (int16_t)(z * K);
-    return (int8_t)(z / 100);
-}
-
-/* ================== Stubs/optional ================== */
-int16_t ro(void){ return 0; }                     /* ggf. später aktivieren */
-void akkuSpannungPruefen(uint16_t x){ (void)x; }  /* nicht genutzt in SIM */
-void ledSchalterTest(void){ /* no-op in SIM */ }
+/* ========= Stubs (einmalig) ========= */
+int16_t ro(void){ return 0; }
+void akkuSpannungPruefen(uint16_t x){ (void)x; }
+void ledSchalterTest(void){ /* no-op */ }
