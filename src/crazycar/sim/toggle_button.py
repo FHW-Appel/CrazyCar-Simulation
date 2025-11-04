@@ -1,4 +1,22 @@
 import pygame
+# =============================================================================
+# crazycar/sim/toggle_button.py  —  UI-Widget (Toggle mit 2–3 Zuständen)
+# -----------------------------------------------------------------------------
+# Aufgabe:
+# - Einfacher, klickbarer Toggle-Button inklusive Zeichnen & Statusverwaltung.
+# - Wird für Sensor-Enable und Collision-Model (Rebound/Stop/Remove) genutzt.
+#
+# Öffentliche API:
+# - class ToggleButton:
+#       rect: pygame.Rect
+#       __init__(x: int, y: int, label_a: str, label_b: str, label_c: str = "")
+#       draw(surface: pygame.Surface) -> None
+#       handle_event(raw_event: pygame.event.Event, max_states: int = 2) -> None
+#       get_status() -> int           # 0/1/(2) je nach max_states
+#
+# Hinweise:
+# - Nutzt raw pygame-Events; deshalb liefert EventSource.last_raw() den Feed.
+# =============================================================================
 
 
 class ToggleButton:

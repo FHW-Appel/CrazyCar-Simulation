@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[3]     # .../CrazyCar-Simulation
 SRC  = ROOT / "src"
 PKG  = "crazycar"
 
-C_DIR = SRC / "c"                              # enthält IF.c, myfunktion.c, IF.h
-OUT_BASE = ROOT / "build" / "_cffi"            # Out-of-tree Buildordner
+C_DIR = SRC / "c"                              
+OUT_BASE = ROOT / "build" / "_cffi"            
 OUT_PKG  = OUT_BASE / PKG
 
 def run_build_native():
@@ -24,7 +24,7 @@ def run_build_native():
     # --- CFFI Setup ---
     ffi = FFI()
 
-    # 1) cdef: nur das, was du aus Python nutzt (Signaturen aus deiner IF.h)
+    # 1) cdef: nur das, was du aus Python nutzt
     ffi.cdef(r"""
         void getfahr(int value);
         void getservo(int value);
