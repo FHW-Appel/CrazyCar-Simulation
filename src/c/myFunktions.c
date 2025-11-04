@@ -54,7 +54,7 @@ uint16_t linearisierungRechts(uint16_t analogwert, uint8_t cosAlpha){
     return abstandrechts;
 }
 
-/* ========= Benötigte Regler-Helfer (wie in deinem Beispiel) ========= */
+/* ========= Benötigte Regler-Helfer (wie in Beispiel) ========= */
 int16_t lo(uint16_t w){
     int16_t e; // Regelabweichung
     int16_t u; // Stellgröße
@@ -83,8 +83,15 @@ int16_t mo(uint16_t w){
 
 /* ========= Deine einfache Fahrlogik (1:1 übertragen) ========= */
 void fahren1(void){
-    int8_t leistung = getFahr();
+    static int boot_sig = 30; // ~kurz nach Start
+    if (boot_sig-- > 0){
+        fahr(0);
+        servo( (boot_sig % 10) < 5 ? 10 : -10 ); // 0.5s rechts/links "wackeln"
+        return;
+    }
 
+    // --- ab hier deine echte Logik ---
+    int8_t leistung = getFahr();
     if ( (abstandlinks  < 30 && leistung > 0) ||
          (abstandvorne  < 30 && leistung > 0) ||
          (abstandrechts < 30 && leistung > 0) ||
@@ -93,17 +100,13 @@ void fahren1(void){
          (abstandrechts < 40 && leistung < 0) )
     {
         fahr(-20);
-        if (abstandlinks > abstandrechts){
-            servo(10);
-        } else {
-            servo(-10);
-        }
+        servo(abstandlinks > abstandrechts ? 10 : -10);
     } else {
-        /* Geradeaus-Fall */
         fahr(12);
         servo(mo(0));
     }
 }
+
 
 /* ========= Stubs (einmalig) ========= */
 int16_t ro(void){ return 0; }
