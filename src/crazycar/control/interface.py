@@ -1,8 +1,10 @@
 # crazycar/control/interface.py
 from __future__ import annotations
 import os
+import sys
 import math
 import logging
+import importlib
 from abc import ABC, abstractmethod
 from typing import List, Any
 
@@ -20,17 +22,80 @@ if not logging.getLogger().handlers:
 log = logging.getLogger("crazycar.control.interface")
 
 # --------------------------------------------------------------------
-# Optional: natives C-Modul laden (Fallback auf Python-Regler)
+# Sicherstellen, dass build/_cffi importierbar ist (auch im Child)
 # --------------------------------------------------------------------
+_build_dir: str | None = None
 try:
-    from crazycar.carsim_native import ffi, lib
+    from crazycar.interop.build_tools import ensure_build_on_path
+    _build_dir = ensure_build_on_path()
+    if _build_dir and _build_dir not in sys.path:
+        sys.path.insert(0, _build_dir)
+except Exception as _e:
+    log.debug("ensure_build_on_path fehlgeschlagen (ok, wird ohne versucht): %r", _e)
+
+# --------------------------------------------------------------------
+# Optional: natives C-Modul laden (Fallback auf Python-Regler)
+# Erzwinge, dass es – wenn möglich – aus build/_cffi kommt.
+# --------------------------------------------------------------------
+ffi = None
+lib = None
+_NATIVE_OK = False
+try:
+    # Erster Import
+    mod = importlib.import_module("crazycar.carsim_native")
+
+    # Falls nicht aus build/_cffi geladen, versuche Neuimport von dort
+    mod_file = getattr(mod, "__file__", "") or ""
+    if _build_dir and _build_dir not in mod_file:
+        log.warning(
+            "carsim_native wurde nicht aus build/_cffi geladen (%s). "
+            "Versuche Neuimport aus Build-Pfad: %s", mod_file, _build_dir
+        )
+        sys.modules.pop("crazycar.carsim_native", None)
+        if _build_dir not in sys.path:
+            sys.path.insert(0, _build_dir)
+        mod = importlib.import_module("crazycar.carsim_native")
+
+    ffi, lib = mod.ffi, mod.lib
     _NATIVE_OK = True
-    log.info("Native Modul geladen: crazycar.carsim_native (C-Regler verfügbar).")
+    log.info("Native Modul geladen: %s (C-Regler verfügbar).", getattr(mod, "__file__", "<??>"))
+
+    if os.getenv("CRAZYCAR_DEBUG") == "1":
+        have = lambda n: hasattr(lib, n)
+        log.debug(
+            "carsim_native Symbole: getfahr=%s, fahr=%s, getservo=%s, servo=%s, "
+            "getfwert=%s, getswert=%s, regelungtechnik=%s",
+            have("getfahr"), have("fahr"), have("getservo"), have("servo"),
+            have("getfwert"), have("getswert"), have("regelungtechnik")
+        )
 except Exception as e:
-    ffi = None
-    lib = None
-    _NATIVE_OK = False
     log.warning("Kein natives Modul verfügbar, nutze Python-Regler. Grund: %r", e)
+
+# ------------------------------------------------------------
+# Setter-Resolver (einmalig auflösen, dann direkt callen)
+# ------------------------------------------------------------
+_set_power = None  # type: ignore[assignment]
+_set_steer = None  # type: ignore[assignment]
+if _NATIVE_OK and lib is not None:
+    if hasattr(lib, "getfahr"):
+        _set_power = getattr(lib, "getfahr")
+    elif hasattr(lib, "fahr"):
+        _set_power = getattr(lib, "fahr")
+
+    if hasattr(lib, "getservo"):
+        _set_steer = getattr(lib, "getservo")
+    elif hasattr(lib, "servo"):
+        _set_steer = getattr(lib, "servo")
+
+    if (_set_power is None) or (_set_steer is None):
+        # Nicht hart abbrechen – Python-Regler übernimmt unten automatisch
+        missing = []
+        if _set_power is None:
+            missing.append("getfahr/fahr")
+        if _set_steer is None:
+            missing.append("getservo/servo")
+        log.error("C-Regler: fehlende Setter (%s) – Fallback auf Python-Regler.", ", ".join(missing))
+        _NATIVE_OK = False
 
 # --------------------------------------------------------------------
 # Sim-/Regelungs-Parameter
@@ -89,7 +154,7 @@ class Interface(MyInterface):
 
         for car in cars:
             if not (getattr(car, "radars_enable", True) and getattr(car, "regelung_enable", True)):
-                log.debug("C-SKIP: radars_enable=%s regelung_enable=%s", car.radars_enable, car.regelung_enable)
+                log.debug("C-SKIP: radars_enable=%s regelung_enable=%s", getattr(car, "radars_enable", None), getattr(car, "regelung_enable", None))
                 continue
             if not getattr(car, "bit_volt_wert_list", None) or len(car.bit_volt_wert_list) < 3:
                 log.debug("C-SKIP: zu wenige analog Werte: %s", getattr(car, "bit_volt_wert_list", None))
@@ -97,19 +162,23 @@ class Interface(MyInterface):
 
             try:
                 # Eingänge setzen
-                lib.getfahr(int(car.power))
-                lib.getservo(int(car.radangle))
+                # Achtung: _set_power/_set_steer können None sein, dann geht der except-Zweig in den Python-Fallback.
+                _set_power(int(car.power))      # type: ignore[misc]
+                _set_steer(int(car.radangle))   # type: ignore[misc]
 
                 rechts = int(car.bit_volt_wert_list[0][0])
                 vorne  = int(car.bit_volt_wert_list[1][0])
                 links  = int(car.bit_volt_wert_list[2][0])
 
-                radians = math.radians(car.radar_angle)
-                cosAlpha = int(math.cos(radians) * 10)
+                radians = math.radians(getattr(car, "radar_angle", 0.0))
+                # Cosinus in Skala -10..+10, int8 in C → hier begrenzen
+                cosAlpha = int(round(math.cos(radians) * 10))
+                if cosAlpha < -127: cosAlpha = -127
+                if cosAlpha > 127:  cosAlpha = 127
 
                 lib.getabstandvorne(vorne)
-                lib.getabstandrechts(rechts, cosAlpha)
-                lib.getabstandlinks(links,  cosAlpha)
+                lib.getabstandrechts(rechts, cosAlpha & 0xFF)  # C-Seite erwartet unsigned char
+                lib.getabstandlinks(links,  cosAlpha & 0xFF)
 
                 if os.getenv("CRAZYCAR_DEBUG") == "1":
                     log.debug(
@@ -140,7 +209,7 @@ class Interface(MyInterface):
     def regelungtechnik_python(cars: List[Any]) -> None:
         for car in cars:
             if not (getattr(car, "radars_enable", True) and getattr(car, "regelung_enable", True)):
-                log.debug("PY-SKIP: radars_enable=%s regelung_enable=%s", car.radars_enable, car.regelung_enable)
+                log.debug("PY-SKIP: radars_enable=%s regelung_enable=%s", getattr(car, "radars_enable", None), getattr(car, "regelung_enable", None))
                 continue
             if not getattr(car, "radar_dist", None) or len(car.radar_dist) < 3:
                 log.debug("PY-SKIP: zu wenige Radar-Distanzen: %s", getattr(car, "radar_dist", None))
@@ -150,7 +219,7 @@ class Interface(MyInterface):
             if os.getenv("CRAZYCAR_DEBUG") == "1":
                 log.debug(
                     "PY IN  dist(px)=%s  dist(cm)=%.1f/%.1f/%.1f",
-                    car.radar_dist, distcm[0], distcm[1], distcm[2]
+                    getattr(car, "radar_dist", None), distcm[0], distcm[1], distcm[2]
                 )
 
             # Seitenführung (einfacher P)

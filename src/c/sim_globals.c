@@ -1,4 +1,6 @@
+/* src/c/sim_globals.c */
 #include <stdint.h>
+#include "cc-lib.h"   /* enthält jetzt die extern-Deklarationen */
 
 /* Stellgrößen + Sensorabstände (wie früher) */
 int      fwert = 0;

@@ -1,5 +1,6 @@
-#ifndef MYFUNKUNKTIONS_H_
-#define MYFUNKUNKTIONS_H_
+/* src/c/myFunktions.h */
+#ifndef MYFUNKTIONS_H_
+#define MYFUNKTIONS_H_
 
 #include <stdint.h>
 
@@ -15,7 +16,6 @@ void      uebung2(void);      /* optional */
 void      uebung3(void);      /* optional */
 
 /* --- Linearisierung --- */
-/* Zentrale, von Studierenden anzupassende Funktion */
 uint16_t  linearisierungAD(uint16_t messwert, uint8_t cosAlpha);
 
 /* Kompatible Alt-API – ruft intern linearisierungAD() */
@@ -36,5 +36,4 @@ int8_t    Dglied(int8_t eold, int8_t e, int8_t K);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* MYFUNKUNKTIONS_H_ */
+#endif /* MYFUNKTIONS_H_ */

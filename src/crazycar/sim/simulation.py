@@ -1,5 +1,3 @@
-# crazycar/sim/simulation.py
-
 # =============================================================================
 # crazycar/sim/simulation.py  —  Fassade / Sammelzugang
 # -----------------------------------------------------------------------------
@@ -12,6 +10,8 @@
 #
 # Öffentliche API (dieses Moduls):
 # - run_simulation(genomes, config): Startet genau einen Simulationslauf.
+# - run_direct(duration_s: float | None = None): Startet einen Lauf OHNE NEAT
+#   (wird z. B. im DLL-Only-Modus vom Optimizer-Adapter aufgerufen).
 #
 # Wichtige Helfer:
 # - _finalize_exit(hard_kill: bool): Garantierter/Weicher Prozess-Exit.
@@ -24,26 +24,12 @@
 # - map_service.MapService (Laden/Resize/Blit der Karte)
 # - loop.run_loop, loop.UICtx (zentraler Frame-Loop + UI-Kontext)
 # - toggle_button.ToggleButton (UI-Widget)
-
+#
 # Tests:
 # - Unit: ModeManager, EventSource-Parsing, MapService-Resize, UICtx-Factories (reine Python-Tests).
 # - Integration: loop.run_loop mit SDL_VIDEODRIVER=dummy (Headless), feste Seeds.
 # - E2E/Smoke: kurzer Sim-Lauf, Artefakte (z. B. CSV/Screenshots) via snapshot_service verifizieren.
-
-"""
-crazycar/
-  sim/
-    __init__.py
-    simulation.py                                # Fassade/Sammelzugang (bleibt bestehen)
-    state.py                 ist vorhanden       # Dataklassen: Config, Runtime-State, Events
-    event_source.py          ist vorhanden       # Input/Event-Pipeline (pygame/Headless)
-    loop.py                  ist vorhanden       # Takt/Frame-Loop (step(), run())
-    modes.py                 ist vorhanden       # Spiel-/Simulationsmodi, Pausenlogik
-    screen_service.py        ist vorhanden       # UI-Zeichnen (Surfaces, Fonts, Buttons)
-    snapshot_service.py      ist vorhanden       # Screenshots/CSV/Artefakte
-    map_service.py           ist vorhanden       # Track/Tilemap laden & Abfragen (Collision)
-    toggle_button.py         ist vorhanden       # (bleibt hier – UI-Widget)
-"""
+# =============================================================================
 
 from __future__ import annotations
 import sys
@@ -274,6 +260,180 @@ def run_simulation(genomes, config):
         sensor_button=sensor_button,
         finalize_exit=_finalize_exit,
     )
+
+    # KEIN auto-quit hier: der Aufrufer darf das Fenster ggf. weiterverwenden.
+    return
+
+
+# -----------------------------------------------------------------------------
+# Direktmodus für DLL-Only (ohne NEAT)
+# Wird vom Optimizer-Adapter aufgerufen, wenn CRAZYCAR_ONLY_DLL aktiv ist
+# und er eine NEAT-freie Einstiegsmethode benötigt.
+# -----------------------------------------------------------------------------
+def run_direct(duration_s: float | None = None) -> None:
+    """
+    Startet die Simulation ohne NEAT.
+    - Verwendet dieselbe UI-/Service-Initialisierung wie run_simulation(),
+      nur ohne genomes/config/NEAT-Netze.
+    - Standardmäßig ist die **C-Regelung (DLL)** aktiv (start_python=False).
+    - Beendet sauber per ESC/X. Optional kann die Laufzeit mit duration_s
+      begrenzt werden (sofern run_loop keine eigene Dauer unterstützt).
+
+    Args:
+        duration_s: Optionale maximale Laufzeit in Sekunden (soft).
+    """
+    import time as _t
+
+    # --- Config/Runtime ---
+    cfg: SimConfig = build_default_config()
+    seed_all(cfg.seed)               # deterministische RNGs
+    rt = SimRuntime()
+    rt.start(cfg)                    # setzt window_size, counter etc.
+
+    # --- Pygame init & Window (lazy) ---
+    if not pygame.get_init():
+        log.debug("pygame.init() (lazy, DLL-Only)")
+        pygame.init()
+
+    window_size = rt.window_size
+    screen = _get_or_create_screen(window_size)
+    pygame.display.set_caption("CrazyCar – DLL-Only")
+
+    # --- UI-Setup (Fonts/Clock) ---
+    font_ft = pygame.freetype.SysFont("Arial", int(19 * f))
+    font_gen = pygame.font.SysFont("Arial", 15)
+    font_alive = pygame.font.SysFont("Arial", 10)
+    clock = pygame.time.Clock()
+
+    # --- UI-Elemente/Buttons/Toggles (wie Bestand) ---
+    positionx = WIDTH * 0.7 * f
+    positiony = HEIGHT - 180 * f
+
+    text_box_rect = pygame.Rect(int(positionx * 0.73), int(positiony + 40), 200, 30)
+    aufnahmen_button = pygame.Rect(int(positionx), int(positiony), 100, 30)
+    recover_button = pygame.Rect(int(positionx), int(positiony + 40), 100, 30)
+
+    collision_button = ToggleButton(
+        int(positionx * 1.2),
+        int(positiony),
+        "Collision-Model: Rebound",
+        "Collision-Model: Stop",
+        "Collision-Model: Remove",
+    )
+    sensor_button = ToggleButton(
+        collision_button.rect.x,
+        int(positiony + collision_button.rect.height + 5),
+        "Sensor Enabled",
+        "Sensor Unable",
+        "",
+    )
+
+    button_width = 215
+    button_height = 45
+    button_color = (0, 255, 0)
+    positionx_btn = int(1700 * f)
+    positiony_btn = int(530 * f)
+    button_regelung1_rect = pygame.Rect(positionx_btn, positiony_btn, button_width, button_height)
+    button_regelung2_rect = pygame.Rect(positionx_btn, positiony_btn + button_height + 30, button_width, button_height)
+
+    dialog_width = 500
+    dialog_height = 200
+    dialog_x = (WIDTH - dialog_width) // 2
+    dialog_y = (HEIGHT - dialog_height) // 2
+    button_dialog_width = 100
+    button_dialog_height = 30
+    button_padding = 30
+    button_dialog_x = dialog_x + 100
+    button_dialog_y = dialog_y + dialog_height - button_dialog_height - button_padding
+    button_yes_rect = pygame.Rect(button_dialog_x, button_dialog_y, button_dialog_width, button_dialog_height)
+    button_no_rect = pygame.Rect(
+        button_dialog_x + button_dialog_width + 100, button_dialog_y, button_dialog_width, button_dialog_height
+    )
+
+    # UI-Rects-Bundle für ModeManager (kapselt Klickflächen für Dialog/Moduswahl/Snapshots)
+    ui_rects = UIRects(
+        aufnahmen_button=aufnahmen_button,
+        recover_button=recover_button,
+        button_yes_rect=button_yes_rect,
+        button_no_rect=button_no_rect,
+        button_regelung1_rect=button_regelung1_rect,
+        button_regelung2_rect=button_regelung2_rect,
+    )
+
+    # Initial-Toggles (dürfen jetzt gezeichnet werden, screen existiert)
+    collision_button.draw(screen)
+    sensor_button.draw(screen)
+
+    # Labels der Modus-Schaltflächen (wie Bestand)
+    text1 = "c_regelung"
+    text2 = "python_regelung"
+    text_color = (0, 0, 0)
+
+    # --- Map-Service (lädt „Racemap.png“, skaliert/resize, blit) ---
+    map_service = MapService(window_size, asset_name="Racemap.png")
+
+    # --- Fahrzeuge (Bestand / Spawnpunkt) ---
+    cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
+    log.info("Direct-Run (DLL-Only): cars=%d size=%sx%s", len(cars), *window_size)
+
+    rt.current_generation += 1  # kosmetisch für HUD/Counter
+
+    # --- Manager (Events/Modus) ---
+    es = EventSource(headless=cfg.headless)
+
+    # Wichtig: standardmäßig **C-Regelung** aktivieren (DLL-Logik bevorzugen)
+    modes = ModeManager(start_python=False)
+
+    # --- UI-Kontext für den Loop (zentralisiert alles, was der Loop zum Zeichnen braucht) ---
+    ui = UICtx(
+        screen=screen,
+        font_ft=font_ft,
+        font_gen=font_gen,
+        font_alive=font_alive,
+        clock=clock,
+        text1=text1,
+        text2=text2,
+        text_color=text_color,
+        button_color=button_color,
+        button_regelung1_rect=button_regelung1_rect,
+        button_regelung2_rect=button_regelung2_rect,
+        button_yes_rect=button_yes_rect,
+        button_no_rect=button_no_rect,
+        aufnahmen_button=aufnahmen_button,
+        recover_button=recover_button,
+        text_box_rect=text_box_rect,
+        positionx_btn=positionx_btn,
+        positiony_btn=positiony_btn,
+        button_width=button_width,
+        button_height=button_height,
+    )
+
+    # --- Hauptschleife ---
+    # Hinweis: Falls deine run_loop bereits eine "duration" unterstützt, kannst du
+    # den Parameter unten ergänzen (auskommentierte Zeile). Ansonsten sorgt
+    # duration_s nur als Soft-Grenze für einen nachgelagerten Soft-Exit.
+    start_t = _t.time()
+    run_loop(
+        cfg=cfg,
+        rt=rt,
+        es=es,
+        modes=modes,
+        ui=ui,
+        ui_rects=ui_rects,
+        map_service=map_service,
+        cars=cars,
+        collision_button=collision_button,
+        sensor_button=sensor_button,
+        finalize_exit=_finalize_exit,
+        # duration=duration_s,  # nur aktivieren, falls run_loop(duration=...) existiert
+    )
+
+    # Fallback-Soft-Exit, wenn run_loop keine Dauer kennt:
+    if duration_s is not None and (_t.time() - start_t) >= duration_s:
+        try:
+            _finalize_exit(hard_kill=False)
+        except SystemExit:
+            pass
 
     # KEIN auto-quit hier: der Aufrufer darf das Fenster ggf. weiterverwenden.
     return

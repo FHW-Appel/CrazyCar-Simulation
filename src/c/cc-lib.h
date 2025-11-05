@@ -20,6 +20,7 @@ extern "C" {
   #define CC_API
 #endif
 
+/* --- Öffentliche C-API (Funktionen) ------------------------------------- */
 CC_API void     fahr(int f);
 CC_API int      getfwert(void);
 CC_API void     servo(int s);
@@ -35,6 +36,19 @@ CC_API int8_t   getServo(void);
 CC_API uint16_t get_abstandvorne(void);
 CC_API uint16_t get_abstandrechts(void);
 CC_API uint16_t get_abstandlinks(void);
+
+/* --- (Neu) Externe Globals (nur Deklaration!) --------------------------- */
+/* Definitionen stehen in sim_globals.c */
+extern int      fwert;
+extern int      swert;
+extern int8_t   leistung_now;
+extern int8_t   winkel_now;
+extern uint16_t abstandvorne;
+extern uint16_t abstandlinks;
+extern uint16_t abstandrechts;
+
+/* optionale Regler-Helper-Variablen */
+extern int16_t  m1, m2, e, y, sollwert;
 
 #ifdef __cplusplus
 }
