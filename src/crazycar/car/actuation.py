@@ -3,6 +3,13 @@
 
 from __future__ import annotations
 from typing import Callable, Tuple
+import os
+import logging
+
+# Configurable deadzone/min-start via environment for easier testing:
+_LOG = logging.getLogger("crazycar.car.actuation")
+DEADZONE = float(os.getenv("CRAZYCAR_MOTOR_DEADZONE", "18"))
+MIN_START_PERCENT = float(os.getenv("CRAZYCAR_MIN_START_PERCENT", "0.08"))
 
 # Typ für eine Geschwindigkeitsfunktion, die (z. B. aus model.Car) die aktuelle
 # Fahrzeug-Geschwindigkeit aus einem Power-Wert berechnet.
@@ -63,20 +70,26 @@ def apply_power(
     Returns:
         (new_power, new_speed_px)
     """
-    # Totzone: -18 < fwert < 18  → Motor aus
-    if -18 < fwert < 18:
+    # Totzone: configurable via CRAZYCAR_MOTOR_DEADZONE (default 18)
+    if -DEADZONE < fwert < DEADZONE:
         new_power = 0.0
         new_speed = speed_fn(new_power)
+        _LOG.debug("apply_power: fwert=%.1f within deadzone=%.1f -> power=0", fwert, DEADZONE)
         return new_power, new_speed
 
     # Vorwärts: 18 .. maxpower
-    if 18 <= fwert <= maxpower:
-        new_power = float(fwert)
+    if DEADZONE <= fwert <= maxpower:
+        # Allow a minimal start percentage to overcome static friction if configured
+        if 0 < fwert < (maxpower * MIN_START_PERCENT):
+            new_power = float(maxpower * MIN_START_PERCENT)
+            _LOG.debug("apply_power: fwert=%.1f < min_start -> using min_start%%=%.3f => power=%.2f", fwert, MIN_START_PERCENT, new_power)
+        else:
+            new_power = float(fwert)
         new_speed = speed_fn(new_power)
         return new_power, new_speed
 
     # Rückwärts: -maxpower .. -18
-    if -maxpower <= fwert <= -18:
+    if -maxpower <= fwert <= -DEADZONE:
         # Rückstoß-/Freilauf-Sequenz, falls aktuell noch Vorwärtsleistung anliegt
         if current_power > 0:
             # kurzer Gegenschub

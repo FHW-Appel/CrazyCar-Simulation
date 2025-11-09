@@ -28,8 +28,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 import pygame
+import logging
 
 from .state import SimRuntime
+import os
 from ..car.model import f  # nur falls wir später Skalierungen brauchen
 
 @dataclass
@@ -65,6 +67,9 @@ class ModeManager:
         for ev in events:
             et = getattr(ev, "type", None)
 
+            # lightweight logger for mode actions
+            log = logging.getLogger("crazycar.sim.modes")
+
             # -------------------------
             # Tasten, die immer gelten
             # -------------------------
@@ -83,27 +88,53 @@ class ModeManager:
                     if ui.aufnahmen_button.collidepoint(pos):
                         rt.paused = False
                         continue
-                    # Dialog: NO
+                    # Dialog: NO -> Abbrechen (keine Modusänderung)
                     if ui.button_no_rect.collidepoint(pos):
-                        if self._button_py:
-                            self.regelung_py = True
-                            self._button_py = False
-                        if self._button_c:
-                            self.regelung_py = False
-                            self._button_c = False
+                        log.debug("ModeManager: Dialog NO clicked at %s — canceling mode change", pos)
+                        # clear temporary selection flags, keep current mode
+                        self._button_py = False
+                        self._button_c = False
                         rt.paused = False
                         self.show_dialog = False
                         continue
-                    # Dialog: YES (Moduswechsel + akt. Car terminieren)
+                    # Dialog: YES (Moduswechsel → Modus setzen + akt. Car terminieren)
                     if ui.button_yes_rect.collidepoint(pos):
+                        log.debug("ModeManager: Dialog YES clicked at %s — applying pending selection (py=%s, c=%s)", pos, self._button_py, self._button_c)
+                        # If the user requested python_regelung, enable it
                         if self._button_py:
-                            self.regelung_py = False
-                            self._button_py = False
-                        if self._button_c:
+                            log.info("ModeManager: switching to PYTHON regulator (restart requested)")
+                            # Persist choice so a restarted simulation honors it
+                            try:
+                                path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+                                with open(path, "w", encoding="utf-8") as _f:
+                                    _f.write("1")
+                                log.debug("ModeManager: persisted start-mode file %s", path)
+                            except Exception as _e:
+                                log.warning("ModeManager: could not persist start-mode file: %r", _e)
+                            # also set env var for in-process callers (best-effort)
+                            os.environ["CRAZYCAR_START_PYTHON"] = "1"
                             self.regelung_py = True
+                            self._button_py = False
+                        # If the user requested c_regelung, disable python mode
+                        if self._button_c:
+                            log.info("ModeManager: switching to C regulator (restart requested)")
+                            try:
+                                path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+                                with open(path, "w", encoding="utf-8") as _f:
+                                    _f.write("0")
+                                log.debug("ModeManager: persisted start-mode file %s", path)
+                            except Exception as _e:
+                                log.warning("ModeManager: could not persist start-mode file: %r", _e)
+                            os.environ["CRAZYCAR_START_PYTHON"] = "0"
+                            self.regelung_py = False
                             self._button_c = False
+                        # terminate current car so optimizer/spawn logic can restart
                         if cars:
-                            cars[0].alive = False
+                            try:
+                                cars[0].alive = False
+                            except Exception:
+                                # best-effort only
+                                pass
                         rt.paused = False
                         self.show_dialog = False
                         continue
@@ -126,6 +157,7 @@ class ModeManager:
                     continue
                 # Dialog öffnen: Ziel python_regelung
                 if ui.button_regelung2_rect.collidepoint(pos):
+                    log.debug("ModeManager: python button clicked at %s — opening dialog", pos)
                     self.show_dialog = True
                     rt.paused = True
                     self._button_py = True
@@ -133,6 +165,7 @@ class ModeManager:
                     continue
                 # Dialog öffnen: Ziel c_regelung
                 if ui.button_regelung1_rect.collidepoint(pos):
+                    log.debug("ModeManager: c button clicked at %s — opening dialog", pos)
                     self.show_dialog = True
                     rt.paused = True
                     self._button_c = True

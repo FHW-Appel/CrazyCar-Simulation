@@ -215,7 +215,30 @@ def run_simulation(genomes, config):
 
     # --- Manager (Events/Modus) ---
     es = EventSource(headless=cfg.headless)    # liefert normalisierte Events + Raw-Events (für Widgets)
-    modes = ModeManager(start_python=True)     # verwaltet Pause/Dialog + PY/C-Regelung
+    # Allow persistent override via marker file or env var so a restart can honor user's choice.
+    start_python = None
+    try:
+        path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as _f:
+                    val = _f.read().strip()
+                # consume the file so it's one-shot
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+                start_python = (val == "1")
+                log.debug("Found start-mode marker file %s -> start_python=%s", path, start_python)
+            except Exception as e:
+                log.debug("Could not read start-mode file %s: %r", path, e)
+    except Exception:
+        # fall through to env var default
+        start_python = None
+
+    if start_python is None:
+        start_python = os.getenv("CRAZYCAR_START_PYTHON", "1") == "1"
+    modes = ModeManager(start_python=start_python)     # verwaltet Pause/Dialog + PY/C-Regelung
 
     # --- UI-Kontext für den Loop (zentralisiert alles, was der Loop zum Zeichnen braucht) ---
     ui = UICtx(
@@ -382,7 +405,28 @@ def run_direct(duration_s: float | None = None) -> None:
     es = EventSource(headless=cfg.headless)
 
     # Wichtig: standardmäßig **C-Regelung** aktivieren (DLL-Logik bevorzugen)
-    modes = ModeManager(start_python=False)
+    # Allow override by marker file or env var so a restart can start in Python mode if requested.
+    start_python = None
+    try:
+        path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as _f:
+                    val = _f.read().strip()
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+                start_python = (val == "1")
+                log.debug("Found start-mode marker file %s -> start_python=%s", path, start_python)
+            except Exception as e:
+                log.debug("Could not read start-mode file %s: %r", path, e)
+    except Exception:
+        start_python = None
+
+    if start_python is None:
+        start_python = os.getenv("CRAZYCAR_START_PYTHON", "0") == "1"
+    modes = ModeManager(start_python=start_python)
 
     # --- UI-Kontext für den Loop (zentralisiert alles, was der Loop zum Zeichnen braucht) ---
     ui = UICtx(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 from typing import Callable, Tuple
+import os
 import numpy as np
 
 Color = Tuple[int, int, int,  int]
@@ -52,24 +53,41 @@ def rebound_action(
     if ang > 90.0:
         ang = 180.0 - ang
 
-    # Dämpfung
+    # Dämpfung (parameterisiert via ENV für feines Tuning)
+    try:
+        damp_small = float(os.getenv("CRAZYCAR_REBOUND_DAMP_SMALL", "0.8"))
+        damp_med = float(os.getenv("CRAZYCAR_REBOUND_DAMP_MED", "0.5"))
+        damp_large = float(os.getenv("CRAZYCAR_REBOUND_DAMP_LARGE", "0.2"))
+    except Exception:
+        damp_small, damp_med, damp_large = 0.8, 0.5, 0.2
+
     if ang == 0:
         new_speed = speed * 1.0
     elif ang < 30:
-        new_speed = speed * 0.8
+        new_speed = speed * damp_small
     elif ang < 60:
-        new_speed = speed * 0.5
+        new_speed = speed * damp_med
     else:
-        new_speed = speed * 0.2
+        new_speed = speed * damp_large
 
-    # Rückversatz + Drehen
-    k0 = -1.7
-    s = 8.0 * max(speed, 0.0) * math.sin(math.radians(ang))
+    # Rückversatz + Drehen (parameterisiert via ENV)
+    try:
+        k0 = float(os.getenv("CRAZYCAR_REBOUND_K0", "-1.7"))
+        s_factor = float(os.getenv("CRAZYCAR_REBOUND_S_FACTOR", "8.0"))
+        turn_factor = float(os.getenv("CRAZYCAR_REBOUND_TURN_FACTOR", "7.0"))
+        turn_offset = float(os.getenv("CRAZYCAR_REBOUND_TURN_OFFSET", "1.0"))
+    except Exception:
+        k0 = -1.7
+        s_factor = 8.0
+        turn_factor = 7.0
+        turn_offset = 1.0
+
+    s = s_factor * max(speed, 0.0) * math.sin(math.radians(ang))
     dx = k0 * math.cos(math.radians(360 - carangle)) * s
     dy = k0 * math.sin(math.radians(360 - carangle)) * s
 
     kt = -1.0 if nr == 1 else 1.0
-    turn = 7.0 * math.sin(math.radians(2 * ang)) + 1.0
+    turn = turn_factor * math.sin(math.radians(2 * ang)) + turn_offset
     new_angle = (carangle + kt * turn) % 360.0
 
     return new_speed, new_angle, (dx, dy), True

@@ -218,15 +218,38 @@ def run_loop(
         # ----------------------------
         if modes.show_dialog:
             # ALT (war zuvor in Interface): jetzt via screen_service
-            draw_dialog(ui.screen)
-            draw_button(
-                ui.screen, "Yes", (0, 0, 0), (0, 255, 0),
-                ui.button_yes_rect.x, ui.button_yes_rect.y, ui.button_yes_rect.w, ui.button_yes_rect.h, ui.button_yes_rect
-            )
-            draw_button(
-                ui.screen, "No", (0, 0, 0), (255, 0, 0),
-                ui.button_no_rect.x, ui.button_no_rect.y, ui.button_no_rect.w, ui.button_no_rect.h, ui.button_no_rect
-            )
+                # Compute dialog/button positions dynamically from current screen size
+                # so clicks (ui_rects) match the drawn dialog even after resize/DPI changes.
+                draw_dialog(ui.screen)
+                sw, sh = ui.screen.get_size()
+                dialog_w, dialog_h = 500, 200
+                dialog_x = (sw - dialog_w) // 2
+                dialog_y = (sh - dialog_h) // 2
+                button_dialog_width = 100
+                button_dialog_height = 30
+                button_padding = 30
+                button_dialog_x = dialog_x + 100
+                button_dialog_y = dialog_y + dialog_h - button_dialog_height - button_padding
+
+                # Update UI rects (so ModeManager collision checks match what's drawn)
+                ui_rects.button_yes_rect.x = button_dialog_x
+                ui_rects.button_yes_rect.y = button_dialog_y
+                ui_rects.button_yes_rect.w = button_dialog_width
+                ui_rects.button_yes_rect.h = button_dialog_height
+
+                ui_rects.button_no_rect.x = button_dialog_x + button_dialog_width + 100
+                ui_rects.button_no_rect.y = button_dialog_y
+                ui_rects.button_no_rect.w = button_dialog_width
+                ui_rects.button_no_rect.h = button_dialog_height
+
+                draw_button(
+                    ui.screen, "Yes", (0, 0, 0), (0, 255, 0),
+                    ui_rects.button_yes_rect.x, ui_rects.button_yes_rect.y, ui_rects.button_yes_rect.w, ui_rects.button_yes_rect.h, ui_rects.button_yes_rect
+                )
+                draw_button(
+                    ui.screen, "No", (0, 0, 0), (255, 0, 0),
+                    ui_rects.button_no_rect.x, ui_rects.button_no_rect.y, ui_rects.button_no_rect.w, ui_rects.button_no_rect.h, ui_rects.button_no_rect
+                )
 
         # Haupt-Buttons
         draw_button(
