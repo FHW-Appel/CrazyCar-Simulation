@@ -61,9 +61,49 @@ def collision_step(
 
             if collision_status == 0:  # rebound
                 speed, carangle, (dx, dy), _slowed = rebound_action(pt, nr, carangle, speed, color_at, border_color)
-                pos_dx += dx; pos_dy += dy
+                # Try to ensure the post-rebound displacement actually moves the
+                # car out of the wall. In some edge-cases (fast/angled hits)
+                # the computed dx/dy may still leave corners inside the border
+                # color. Do a few corrective steps: push along the vector from
+                # collision-point to car-centroid until corners are clear.
+                prop_dx = dx
+                prop_dy = dy
+                try:
+                    # centroid of car corners
+                    cx = sum(p[0] for p in corners) / max(1, len(list(corners)))
+                    cy = sum(p[1] for p in corners) / max(1, len(list(corners)))
+                except Exception:
+                    cx = float(pt[0])
+                    cy = float(pt[1])
+
+                # iterative correction (small steps) to avoid clipping through walls
+                for _attempt in range(6):
+                    still_collide = False
+                    for cp in corners:
+                        tx = int(cp[0] + prop_dx)
+                        ty = int(cp[1] + prop_dy)
+                        try:
+                            if color_at((tx, ty)) == border_color:
+                                still_collide = True
+                                break
+                        except Exception:
+                            # Out-of-bounds — treat as collision and attempt to push inwards
+                            still_collide = True
+                            break
+                    if not still_collide:
+                        break
+                    # compute direction away from collision-point towards car centroid
+                    vx = cx - float(pt[0])
+                    vy = cy - float(pt[1])
+                    nrm = (vx * vx + vy * vy) ** 0.5 or 1.0
+                    vx /= nrm; vy /= nrm
+                    # push a few pixels inward (tunable). Using 4px steps reduces tunneling.
+                    prop_dx += vx * 4.0
+                    prop_dy += vy * 4.0
+
+                pos_dx += prop_dx; pos_dy += prop_dy
                 if os.getenv("CRAZYCAR_DEBUG") == "1":
-                    log.debug("rebound: speed=%.3f angle=%.2f Δpos=(%.2f,%.2f)", speed, carangle, dx, dy)
+                    log.debug("rebound: speed=%.3f angle=%.2f Δpos=(%.2f,%.2f) (corr->(%.2f,%.2f))", speed, carangle, dx, dy, prop_dx, prop_dy)
             elif collision_status == 1:  # stop
                 speed = 0.0
                 disable_control = True

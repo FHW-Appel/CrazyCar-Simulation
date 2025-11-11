@@ -54,6 +54,8 @@ from .modes import ModeManager, UIRects
 from .map_service import MapService
 # Loop (Hauptschleife) + UI-Kontext
 from .loop import run_loop, UICtx
+from .spawn_utils import spawn_from_map
+from .screen_service import get_or_create_screen
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -84,20 +86,7 @@ def _finalize_exit(hard_kill: bool) -> None:
             raise SystemExit(0)
 
 
-def _get_or_create_screen(size: Tuple[int, int]) -> pygame.Surface:
-    """
-    Nimmt ein existierendes Fenster (falls z. B. der Optimizer eins geöffnet hat),
-    oder erzeugt eines. So vermeiden wir Doppel-Fenster. Kümmert sich auch um Resize.
-    """
-    scr = pygame.display.get_surface()
-    if scr is None:
-        log.debug("Kein aktives Display gefunden → set_mode(%s) wird erstellt.", size)
-        scr = pygame.display.set_mode(size, pygame.RESIZABLE)
-    else:
-        if scr.get_size() != size:
-            log.debug("Displaygröße %s → Resize auf %s", scr.get_size(), size)
-            scr = pygame.display.set_mode(size, pygame.RESIZABLE)
-    return scr
+# screen creation helper moved to screen_service.get_or_create_screen
 
 
 def run_simulation(genomes, config):
@@ -124,7 +113,7 @@ def run_simulation(genomes, config):
         pygame.init()
 
     window_size = rt.window_size
-    screen = _get_or_create_screen(window_size)
+    screen = get_or_create_screen(window_size)
     pygame.display.set_caption("CrazyCar Simulation")
 
     # --- UI-Setup (Fonts/Clock) ---
@@ -200,6 +189,8 @@ def run_simulation(genomes, config):
     # --- Map-Service (lädt „Racemap.png“, skaliert/resize, blit) ---
     map_service = MapService(window_size, asset_name="Racemap.png")
 
+    # Spawn/Car factory has been moved to sim.spawn_utils.spawn_from_map
+
     # --- NEAT-Netze (Bestand) ---
     nets = []
     for _, g in genomes:
@@ -208,8 +199,14 @@ def run_simulation(genomes, config):
         g.fitness = 0
 
     # --- Fahrzeuge (Bestand / Spawnpunkt) ---
-    cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
-    log.info("Sim-Start: cars=%d size=%sx%s", len(cars), *window_size)
+    # Verwende MapService.get_spawn() anstelle eines hardcodierten Punkts.
+    try:
+        cars = spawn_from_map(map_service)
+        log.info("Sim-Start: cars=%d size=%sx%s (spawn from MapService) -> pos=%s", len(cars), *window_size, cars[0].position)
+    except Exception:
+        # Fallback auf bisherigen harten Spawn, falls MapService fehlschlägt
+        cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
+        log.exception("Sim-Start: MapService.get_spawn() fehlgeschlagen — benutze Fallback-Spawn.")
 
     rt.current_generation += 1
 
@@ -319,7 +316,7 @@ def run_direct(duration_s: float | None = None) -> None:
         pygame.init()
 
     window_size = rt.window_size
-    screen = _get_or_create_screen(window_size)
+    screen = get_or_create_screen(window_size)
     pygame.display.set_caption("CrazyCar – DLL-Only")
 
     # --- UI-Setup (Fonts/Clock) ---
@@ -396,8 +393,12 @@ def run_direct(duration_s: float | None = None) -> None:
     map_service = MapService(window_size, asset_name="Racemap.png")
 
     # --- Fahrzeuge (Bestand / Spawnpunkt) ---
-    cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
-    log.info("Direct-Run (DLL-Only): cars=%d size=%sx%s", len(cars), *window_size)
+    try:
+        cars = spawn_from_map(map_service)
+        log.info("Direct-Run (DLL-Only): cars=%d size=%sx%s (spawn from MapService) -> pos=%s", len(cars), *window_size, cars[0].position)
+    except Exception:
+        cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
+        log.exception("Direct-Run: MapService.get_spawn() fehlgeschlagen — benutze Fallback-Spawn.")
 
     rt.current_generation += 1  # kosmetisch für HUD/Counter
 

@@ -146,7 +146,7 @@ WIDTH = model.WIDTH
 HEIGHT = model.HEIGHT
 
 # Diese Werte kann dein Optimizer überschreiben (per Dateiedit)
-k1 = 1.1
+k1 = 1.10000001
 k2 = 1.1
 k3 = 1.1
 kp1 = 1.1
@@ -363,42 +363,26 @@ class Interface(MyInterface):
     # ------------------------------------------------------------
     @staticmethod
     def draw_dialog(screen) -> None:
+        # Delegate to the canonical screen_service implementation. Keep a thin
+        # wrapper here for API compatibility so callers of Interface.draw_dialog
+        # continue to work.
         try:
-            import pygame
+            from ..sim import screen_service
+            screen_service.draw_dialog(screen)
         except Exception:
-            log.debug("draw_dialog: pygame nicht verfügbar (noop).")
-            return
-
-        dialog_width = 500
-        dialog_height = 200
-        dialog_x = (WIDTH - dialog_width) // 2
-        dialog_y = (HEIGHT - dialog_height) // 2
-
-        dialog_surface = pygame.Surface((dialog_width, dialog_height))
-        dialog_surface.fill((255, 255, 255))
-        pygame.draw.rect(dialog_surface, (0, 0, 0), (0, 0, dialog_width, dialog_height), 4)
-
-        font = pygame.font.Font(None, 24)
-        text = font.render("Sind Sie sicher, dass Sie die Regelungstechnik ändern wollen?", True, (0, 0, 0))
-        text_rect = text.get_rect(center=(dialog_width // 2, dialog_height // 2 - 20))
-        dialog_surface.blit(text, text_rect)
-
-        screen.blit(dialog_surface, (dialog_x, dialog_y))
-        pygame.display.flip()
+            log.debug("draw_dialog: delegated draw_dialog failed (noop).")
 
     @staticmethod
     def draw_button(screen, text, text_color, button_color, positionx, positiony, button_width, button_height, button_rect) -> None:
+        # Delegate to the canonical screen_service implementation. Keep a thin
+        # wrapper for backwards compatibility with older code that calls
+        # Interface.draw_button.
         try:
-            import pygame
+            from ..sim import screen_service
+            screen_service.draw_button(screen, text, text_color, button_color, positionx, positiony, button_width, button_height, button_rect)
         except Exception:
-            log.debug("draw_button: pygame nicht verfügbar (noop).")
-            return
-
-        pygame.draw.rect(screen, button_color, (positionx, positiony, button_width, button_height))
-        font = pygame.font.Font(None, 24)
-        text_surface = font.render(text, True, text_color)
-        text_rect = text_surface.get_rect(center=button_rect.center)
-        screen.blit(text_surface, text_rect)
+            log.debug("draw_button: delegated draw_button failed (noop).")
+        
 
     # ------------------------------------------------------------
     # Kleine C-Getter (nützlich fürs Debuggen des nativen Moduls)
