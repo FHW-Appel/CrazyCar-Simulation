@@ -9,7 +9,7 @@ from typing import Any, Dict
 # Einfacher Debug-Schalter: 0 = aus, 1 = an
 # Im Debug-Modus werden globale Loglevel und ausführliche Traces aktiviert.
 # Setze hier auf 1, wenn du standardmäßig die Debug-Logs sehen willst.
-DEBUG_DEFAULT = 1
+DEBUG_DEFAULT = 0
 
 _THIS = Path(__file__).resolve()
 _SRC_DIR = _THIS.parents[1]  # .../src
