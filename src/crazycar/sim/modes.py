@@ -56,31 +56,37 @@ class ModeManager:
         self._button_c: bool = False
 
     def apply(self, events: List, rt: SimRuntime, ui: UIRects, cars) -> Dict[str, bool]:
-        """
-        Verarbeitet Events sowohl im aktiven als auch im Pausenmodus.
-        Gibt Aktionen zurück, die der Aufrufer ausführt:
-          - take_snapshot: Momentaufnahme auslösen
-          - recover_snapshot: Wiederherstellung auslösen
+        """Process events for pause/dialog/mode switching logic.
+        
+        Handles both active and paused states. Returns action dictionary for
+        caller to execute (snapshot, recovery, mode changes).
+        
+        Args:
+            events: List of normalized SimEvent objects from EventSource
+            rt: Runtime state (paused flag, generation counter, etc.)
+            ui: UI rectangles for collision detection
+            cars: List of active Car instances (for termination on mode change)
+            
+        Returns:
+            Dict with action flags:
+                - "take_snapshot": bool - Trigger momentary snapshot
+                - "recover_snapshot": bool - Trigger snapshot recovery
         """
         actions = {"take_snapshot": False, "recover_snapshot": False}
 
         for ev in events:
             et = getattr(ev, "type", None)
 
-            # lightweight logger for mode actions
+            # Logger für Modus-Aktionen
             log = logging.getLogger("crazycar.sim.modes")
 
-            # -------------------------
-            # Tasten, die immer gelten
-            # -------------------------
+            # Globale Tasten (funktionieren immer)
             if et == "SPACE":
-                # Toggle Pause
+                # Pause umschalten
                 rt.paused = not rt.paused
                 continue
 
-            # -------------------------
-            # Wenn pausiert: Dialogsteuerung
-            # -------------------------
+            # Pausiert: Dialog- und Button-Steuerung
             if rt.paused:
                 if et == "MOUSE_DOWN":
                     pos = ev.payload["pos"]

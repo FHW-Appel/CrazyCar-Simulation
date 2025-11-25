@@ -102,36 +102,45 @@ def simulate_car(
         if handled:
             break
 
-        time.sleep(0.05)
+        time.sleep(QUEUE_POLL_INTERVAL)
 
-    # 6) Cleanup (terminate → join → ggf. Hard-Kill)
+    # 6) Cleanup: Prozess beenden (terminate → join → ggf. kill)
     cleanup_worker(p)
 
-    # 7) Laufzeit & Logging
+    # 7) Laufzeit berechnen und loggen
     lap_time = time.time() - start
     log.info("Simulation beendet: lap_time=%.3fs aborted=%s finished_ok=%s", lap_time, aborted, finished_ok)
 
-    if lap_time >= 20:
+    # Legacy: Lange Runs in log.csv schreiben (>= 20 Sekunden)
+    LOG_THRESHOLD_SECONDS = 20
+    if lap_time >= LOG_THRESHOLD_SECONDS:
         try:
             with open(log_path(), encoding="utf-8", mode="a+") as f:
                 f.write("20\n")
         except Exception as e:
             log.debug("Schreiben in log.csv fehlgeschlagen: %r", e)
 
-    # 8) ESC → Optimierung abbrechen
+    # 8) ESC-Abbruch → Optimierung stoppen
     if aborted:
         raise KeyboardInterrupt("Simulation aborted via ESC")
 
-    # 9) bevorzugt: echte Runtime vom Child (genauer als lap_time)
+    # 9) Bevorzugt: Echte Runtime vom Child (präziser als lap_time)
     if finished_ok and runtime is not None:
         return float(runtime)
 
-    # 10) Fallback
+    # 10) Fallback: Wall-Clock-Zeit
     return lap_time
 
 
 def _try_get(q):
-    """Nicht-blockierender Queue-Read; gibt dict|None."""
+    """Non-blocking queue read, returns dict or None.
+    
+    Args:
+        q: multiprocessing.Queue instance
+        
+    Returns:
+        Dict from queue if available, None otherwise.
+    """
     try:
         return q.get_nowait()
     except _queue.Empty:

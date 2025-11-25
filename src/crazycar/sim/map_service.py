@@ -172,73 +172,102 @@ class MapService:
             # best-effort only; do not fail spawn detection on probe errors
             pass
 
-        log.info(
+        log.debug(
             "Auto-Spawn (Finish-Line): Spawn=(%d,%d) Winkel=%.1f°. Linienmitte=(%.1f,%.1f) Tangente=(%.3f,%.3f) Normale=(%.3f,%.3f) sign=%+d [score+%.1f/%.1f-].",
             spawn_x, spawn_y, angle_deg, info["cx"], info["cy"], info["vx"], info["vy"], info.get("nx", 0.0), info.get("ny", 0.0), info.get("sign", 0), info.get("s_pos", 0.0), info.get("s_neg", 0.0)
         )
         return Spawn(spawn_x, spawn_y, angle_deg)
 
     def _apply_probe_flip(self, spawn_x: int, spawn_y: int, map_angle: float) -> float:
-        """
-        Best-effort sampling in front of / behind the spawn to detect whether
-        the computed normal points into the border (e.g. white). If forward is
-        on average closer to the border than backward, flip the angle by 180°.
-        Returns the (possibly flipped) map_angle in the same convention as
-        returned by _detect_finish_info (degrees from atan2).
+        """Detect if spawn angle points toward border and flip by 180° if necessary.
+        
+        Samples multiple points in front of and behind the spawn position. If forward
+        direction has more border-colored pixels than backward, the angle is flipped.
+        This ensures the vehicle starts facing into the track, not toward the wall.
+        
+        Args:
+            spawn_x: Spawn x-coordinate (pixels)
+            spawn_y: Spawn y-coordinate (pixels)
+            map_angle: Initial angle from finish-line detection (degrees)
+            
+        Returns:
+            Float: Possibly flipped angle in same convention as input (atan2 degrees).
         """
         try:
             import math
-            # CAR_cover_size and BORDER_COLOR are available from module imports
-            probe_dist = max(8.0, float(CAR_cover_size) * 0.8)
+            
+            # Probe-Distanz: Mindestens 8px, oder 80% der Auto-Größe (was größer ist)
+            MIN_PROBE_DISTANCE = 8.0
+            PROBE_DISTANCE_FACTOR = 0.8  # 80% der Auto-Größe
+            probe_dist = max(MIN_PROBE_DISTANCE, float(CAR_cover_size) * PROBE_DISTANCE_FACTOR)
+            
+            # Winkel in Pygame-Konvention umrechnen
             rad = math.radians(360.0 - float(map_angle))
 
-            steps = [1, 2, 3]
-            f_points = []
-            b_points = []
+            # 3 Probe-Punkte in jede Richtung (1x, 2x, 3x Distanz)
+            PROBE_STEPS = [1, 2, 3]
+            f_points = []  # Forward-Richtung Samples
+            b_points = []  # Backward-Richtung Samples
             surf = self._surface
             w, h = surf.get_width(), surf.get_height()
 
             def sample(px, py):
+                """Sample Farbe an Position (px, py), None wenn außerhalb."""
                 if px < 0 or py < 0 or px >= w or py >= h:
                     return None
                 c = surf.get_at((px, py))
                 return (int(c[0]), int(c[1]), int(c[2]))
 
-            for s in steps:
+            # Probe-Punkte in beide Richtungen samplen
+            for s in PROBE_STEPS:
                 dx = math.cos(rad) * probe_dist * s
                 dy = math.sin(rad) * probe_dist * s
+                
+                # Forward-Punkt (in Fahrtrichtung)
                 fx = int(round(spawn_x + dx))
                 fy = int(round(spawn_y + dy))
+                
+                # Backward-Punkt (entgegen Fahrtrichtung)
                 bx = int(round(spawn_x - dx))
                 by = int(round(spawn_y - dy))
+                
                 fcol = sample(fx, fy)
                 bcol = sample(bx, by)
+                
                 if fcol is not None:
                     f_points.append(((fx, fy), fcol))
                 if bcol is not None:
                     b_points.append(((bx, by), bcol))
 
+            # Farbdistanz zum Rand berechnen (quadriert für Performance)
             def dist2(c):
+                """Quadrierte Euklidische Distanz zur Randfarbe."""
                 return (c[0]-BORDER_COLOR[0])**2 + (c[1]-BORDER_COLOR[1])**2 + (c[2]-BORDER_COLOR[2])**2
 
+            # Summe der Distanzen: Niedriger = näher am Rand
             df_sum = sum(dist2(c) for (_, c) in f_points) if f_points else float('inf')
             db_sum = sum(dist2(c) for (_, c) in b_points) if b_points else float('inf')
 
             log.debug("Spawn probes: forward=%d points back=%d points df_sum=%d db_sum=%d", len(f_points), len(b_points), int(df_sum), int(db_sum))
 
-            # draw probe points on the surface for debug visibility (red=forward, green=back)
-            try:
-                for (px, py), _c in f_points:
-                    pygame.draw.circle(surf, (255, 0, 0), (px, py), 3)
-                for (px, py), _c in b_points:
-                    pygame.draw.circle(surf, (0, 255, 0), (px, py), 3)
-            except Exception:
-                # drawing best-effort only
-                pass
+            # Debug-Visualisierung: Probe-Punkte auf Karte zeichnen (rot=vorwärts, grün=rückwärts)
+            # Nur wenn CRAZYCAR_DEBUG=1 gesetzt ist
+            if os.getenv("CRAZYCAR_DEBUG", "0") == "1":
+                try:
+                    DEBUG_MARKER_RADIUS = 3  # Radius der Debug-Kreise in Pixeln
+                    for (px, py), _c in f_points:
+                        pygame.draw.circle(surf, (255, 0, 0), (px, py), DEBUG_MARKER_RADIUS)  # Rot = Forward
+                    for (px, py), _c in b_points:
+                        pygame.draw.circle(surf, (0, 255, 0), (px, py), DEBUG_MARKER_RADIUS)  # Grün = Backward
+                except Exception:
+                    # Best-effort drawing: Fehler ignorieren
+                    pass
 
+            # Entscheidung: Wenn Forward näher am Rand als Backward → 180° drehen
             if f_points and b_points and df_sum < db_sum:
-                new_map = (float(map_angle) + 180.0) % 360.0
-                log.info("Spawn angle flipped 180° (multi-sample): df_sum=%d db_sum=%d -> %.1f->%.1f", int(df_sum), int(db_sum), float(map_angle), new_map)
+                FLIP_ANGLE = 180.0
+                new_map = (float(map_angle) + FLIP_ANGLE) % 360.0
+                log.debug("Spawn angle flipped 180° (multi-sample): df_sum=%d db_sum=%d -> %.1f->%.1f", int(df_sum), int(db_sum), float(map_angle), new_map)
                 return new_map
         except Exception:
             pass

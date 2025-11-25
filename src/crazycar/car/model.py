@@ -46,8 +46,9 @@ if C.CAR_cover_size <= 0 or C.CAR_SIZE_X <= 0 or C.CAR_SIZE_Y <= 0 or C.CAR_Rads
 # *** WICHTIG: Lokale Bindungen aus dem aktuellen constants-Zustand herstellen ***
 CAR_SIZE_X: float   = float(C.CAR_SIZE_X)
 CAR_SIZE_Y: float   = float(C.CAR_SIZE_Y)
-# min. 16 px, damit Sprite nie (0,0) wird und Center korrekt berechnet wird
-CAR_cover_size: int = max(int(C.CAR_cover_size), 16)
+# Minimale Sprite-Größe zur Vermeidung von (0,0) Dimensionen
+MIN_SPRITE_SIZE = 16  # Pixel
+CAR_cover_size: int = max(int(C.CAR_cover_size), MIN_SPRITE_SIZE)
 CAR_Radstand: float = float(C.CAR_Radstand)
 CAR_Spurweite: float = float(C.CAR_Spurweite)
 
@@ -59,82 +60,122 @@ if os.getenv("CRAZYCAR_DEBUG") == "1":
 
 
 class Car:
+    """Main vehicle model integrating physics, rendering, sensors and control.
+    
+    Encapsulates all car state (position, angle, speed, sensors) and orchestrates
+    updates via modular components (kinematics, dynamics, collision, rendering).
+    Provides both simulation (step_*) and legacy API compatibility methods.
+    
+    Attributes:
+        position: Top-left corner [x, y] in pixels
+        center: Center point [x, y] in pixels
+        carangle: Orientation in degrees (0° = right, 90° = down)
+        speed: Current speed in pixels per frame
+        alive: Whether car is still active (not crashed)
+        radars: Sensor readings [(contact_point, distance), ...]
+        
+    Note:
+        Uses global CAR_cover_size, CAR_Radstand, CAR_Spurweite constants.
+    """
     def __init__(self, position, carangle, power, speed_set, radars, bit_volt_wert_list, distance, time):
-        # Instanzweite Cover-Size (robust)
+        # Sprite-Größe (instanzweit, robust gegen Änderungen)
         self.cover_size = CAR_cover_size
 
-        # Sprite laden (rendering.py clamped zusätzlich)
+        # Auto-Sprite laden und initial rotieren
         self.sprite = load_car_sprite(self.cover_size)
         self.rotated_sprite = self.sprite
 
+        # Position und Geometrie
         self.position = position
         self.center = [self.position[0] + self.cover_size / 2, self.position[1] + self.cover_size / 2]
-        self.corners = []
-        self.left_rad = []
-        self.right_rad = []
+        self.corners = []  # Ecken des Autos (wird von geometry.compute_corners gesetzt)
+        self.left_rad = []   # Linke Spur (Tracking)
+        self.right_rad = []  # Rechte Spur (Tracking)
 
-        self.fwert = power
-        self.swert = 0
-        self.sollspeed = self.soll_speed(power)
-        self.speed = 0
-        self.speed_set = speed_set
-        self.power = power
-        self.radangle = 0
-        self.carangle = carangle
+        # Antrieb und Lenkung
+        # DEPRECATED: Legacy-Attribute für Kompatibilität mit alten NEAT-Reglern (vor v2.0)
+        # TODO: Ab v2.0 entfernen, wenn alle Regler auf self.power/self.radangle migriert sind
+        self.fwert = power  # DEPRECATED: Nutze stattdessen self.power (Forward-Leistung 0-100)
+        self.swert = 0      # DEPRECATED: Nutze stattdessen self.radangle (Lenkwinkel in °)
+        
+        self.sollspeed = self.soll_speed(power)  # Ziel-Geschwindigkeit [px/frame]
+        self.speed = 0  # Aktuelle Geschwindigkeit [px/frame]
+        self.speed_set = speed_set  # Geschwindigkeits-Sollwert (konfigurierbar)
+        self.power = power  # Aktuelle Motorleistung (0-100)
+        self.radangle = 0   # Lenkwinkel der Vorderräder [°] (positiv=rechts)
+        self.carangle = carangle  # Fahrzeug-Orientierung [°] (0=rechts, 90=unten)
 
+        # Sensoren (Radars)
         self.radars = radars
-        self.radar_angle = 60
+        RADAR_DEFAULT_SWEEP = 60  # Standard-Sweep ±60° (aus constants.RADAR_SWEEP_DEG)
+        self.radar_angle = RADAR_DEFAULT_SWEEP
         self.radar_dist = []
-        self.bit_volt_wert_list = bit_volt_wert_list
+        self.bit_volt_wert_list = bit_volt_wert_list  # ADC-Werte (Analog→Digital)
         self.drawing_radars = []
 
+        # Zustands-Flags
         self.alive = True
-        self.speed_slowed = False
+        self.speed_slowed = False  # Wurde Geschwindigkeit durch Kollision reduziert?
         self.angle_enable = True
         self.radars_enable = True
         self.drawradar_enable = True
-        self.regelung_enable = True
+        self.regelung_enable = True  # Controller aktiv?
 
-        self.distance = distance
+        # Performance-Tracking
+        self.distance = distance  # Gefahrene Strecke in Pixeln
         self.anlog_dist = []
         self.time = time
         self.start_time = 0
         self.round_time = 0
         self.finished = False
-        self.maxpower = 100
+        MAX_POWER_DEFAULT = 100  # Maximale Leistung (0-100)
+        self.maxpower = MAX_POWER_DEFAULT
 
         log.info(
             "Car init: pos=(%.1f,%.1f) angle=%.1f power=%.1f cover=%dpx",
             self.position[0], self.position[1], self.carangle, self.power, self.cover_size
         )
 
-    # Wrappers
+    # Wrapper-Methoden für externe Module
     def soll_speed(self, power: float) -> float:
+        """Compute target speed for given power level."""
         return _soll_speed(power)
 
     def Geschwindigkeit(self, power: float) -> float:
+        """Update current speed based on power and steering angle."""
         return step_speed(self.speed, power, self.radangle)
 
-    def rotate_center(self, image, angle):  # API-Kompat
+    def rotate_center(self, image, angle):  # Legacy API-Kompatibilität
+        """Rotate image around its center (legacy wrapper)."""
         return rotate_center(image, angle)
 
     def draw(self, screen):
+        """Draw car sprite and radar overlay on screen."""
         draw_car(screen, self.rotated_sprite, tuple(self.position))
         self.draw_radar(screen)
 
     def draw_track(self, screen):
+        """Draw driving track (left/right traces and corner markers)."""
         draw_track(screen, tuple(self.left_rad), tuple(self.right_rad), [tuple(p) for p in self.corners])
 
     def draw_radar(self, screen):
+        """Draw radar sensor visualization."""
         draw_radar(screen, tuple(self.center), self.radars, self.drawradar_enable)
 
     def delay_ms(self, milliseconds: int):
+        """Sleep for given milliseconds (for frame timing)."""
         delay_ms(milliseconds)
 
-    def set_position(self, position):  # Altcode-Kompat
+    def set_position(self, position):  # Legacy Code-Kompatibilität
+        """Update car position (legacy method)."""
         self.position = position
 
     def Lenkeinschlagsänderung(self):
+        """Update car angle based on steering and speed (legacy name).
+        
+        Returns:
+            Float: New car angle in degrees.
+        """
         old = self.carangle
         self.carangle = steer_step(
             carangle_deg=self.carangle,

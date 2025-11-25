@@ -52,7 +52,18 @@ log = logging.getLogger("crazycar.sim.loop")
 
 
 def build_car_info_lines(c: Car, use_python_control: bool) -> List[str]:
-    """Formatiert die HUD-Zeilen stabil ohne verschachtelte f-Strings."""
+    """Format HUD text lines for car telemetry display.
+    
+    Builds comprehensive status display including position, speed, sensors,
+    and control parameters. Stable formatting without nested f-strings.
+    
+    Args:
+        c: Car instance to display info for
+        use_python_control: Whether Python or C controller is active
+        
+    Returns:
+        List of formatted strings for on-screen display.
+    """
     regelung = " Python " if use_python_control else " C "
     lines: List[str] = [
         f"Regelung : {regelung}",
@@ -80,6 +91,22 @@ def build_car_info_lines(c: Car, use_python_control: bool) -> List[str]:
 
 @dataclass
 class UICtx:
+    """UI context bundling all rendering resources for the main loop.
+    
+    Encapsulates pygame surfaces, fonts, colors, and UI element positions
+    to avoid passing many individual parameters to run_loop().
+    
+    Attributes:
+        screen: Main pygame display surface
+        font_ft: FreeType font for high-quality text
+        font_gen: Generic pygame font for fallback
+        font_alive: Font for "alive" status indicator
+        clock: Pygame clock for FPS limiting
+        text1, text2: Button labels
+        text_color, button_color: UI color scheme
+        button_regelung1_rect, button_regelung2_rect: Controller selection buttons
+        button_yes_rect, button_no_rect: Dialog confirmation buttons
+    """
     # Surfaces/Fonts
     screen: pygame.Surface
     font_ft: "pygame.freetype.Font"

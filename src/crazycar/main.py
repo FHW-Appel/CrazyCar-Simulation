@@ -15,7 +15,10 @@ _THIS = Path(__file__).resolve()
 _SRC_DIR = _THIS.parents[1]  # .../src
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
-print("[sys.path add]", _SRC_DIR)
+
+# Logging-Setup früh initialisieren
+log = logging.getLogger(__name__)
+log.info("sys.path add: %s", _SRC_DIR)
 
 from crazycar.interop.build_tools import run_build_native  # nur Build-Tool vorab importieren
 
@@ -53,7 +56,7 @@ def _install_pygame_quit_guard() -> None:
                 if ev.type == pygame.QUIT or (
                     ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE
                 ):
-                    print("[Quit-Guard] Exit durch Benutzer (X oder ESC).")
+                    logging.info("[Quit-Guard] Exit durch Benutzer (X oder ESC).")
                     try:
                         pygame.quit()
                     finally:
@@ -75,19 +78,20 @@ def _install_pygame_quit_guard() -> None:
     pygame.event.poll = _poll_wrapper
     pygame.event._crazycar_quit_guard_installed = True
 
-    print("[Quit-Guard] Aktiviert – ESC und X beenden das Programm.")
+    logging.info("[Quit-Guard] Aktiviert – ESC und X beenden das Programm.")
 # ---------------------------------------------------------------------------
 
 
 def _print_result(res: Dict[str, Any]) -> None:
     """Formatiert die Ausgabe der Optimierungsergebnisse."""
-    print("Optimierte Parameter:")
-    print(f"K1:  {res['k1']}")
-    print(f"K2:  {res['k2']}")
-    print(f"K3:  {res['k3']}")
-    print(f"KP1: {res['kp1']}")
-    print(f"KP2: {res['kp2']}")
-    print(f"Optimale Rundenzeit: {res['optimal_lap_time']}")
+    log = logging.getLogger(__name__)
+    log.info("Optimierte Parameter:")
+    log.info("K1:  %s", res['k1'])
+    log.info("K2:  %s", res['k2'])
+    log.info("K3:  %s", res['k3'])
+    log.info("KP1: %s", res['kp1'])
+    log.info("KP2: %s", res['kp2'])
+    log.info("Optimale Rundenzeit: %s", res['optimal_lap_time'])
 
 
 def main() -> int:
@@ -110,14 +114,14 @@ def main() -> int:
     try:
         rc, build_out_dir = run_build_native()
         if rc != 0:
-            print("[ERROR] Native Build fehlgeschlagen (Exit 1).")
+            logging.error("Native Build fehlgeschlagen (Exit 1).")
         else:
             if build_out_dir and build_out_dir not in sys.path:
                 sys.path.insert(0, build_out_dir)
-                print("[sys.path add build]", build_out_dir)
+                logging.info("sys.path add build: %s", build_out_dir)
             os.environ["CRAZYCAR_NATIVE_PATH"] = build_out_dir or ""
     except Exception as e:
-        print(f"[ERROR] Native Build Exception: {e}")
+        logging.error("Native Build Exception: %s", e)
 
     # -----------------------------------------------------------------------
     # Optimierer starten (nach erfolgreichem Build)
@@ -132,25 +136,24 @@ def main() -> int:
         res = run_optimization()
     except KeyboardInterrupt:
         # Sauber abbrechen ohne langen Traceback (STRG+C)
-        print("\n[main] Abgebrochen (Ctrl+C).")
+        logging.info("Abgebrochen (Ctrl+C).")
         return 130
     except SystemExit as se:
         # Falls der Quit-Guard im Parent greift (unüblich), Exit-Code respektieren
         return int(getattr(se, "code", 0) or 0)
     except Exception as e:
         logging.exception("Unerwarteter Fehler während der Optimierung: %r", e)
-        print("[optimizer] Unerwarteter Fehler:", e)
         return 1
 
     # Ergebnis robust auswerten
     if not isinstance(res, dict):
-        print("[optimizer] Ungültige Rückgabe (kein Dict).")
+        logging.error("[optimizer] Ungültige Rückgabe (kein Dict).")
         return 1
 
     if not res.get("success", False):
         # Abbruchpfad (z. B. ESC aus der Simulation)
         msg = res.get("message", "Abgebrochen.")
-        print("[optimizer] Abbruch oder Fehler:", msg)
+        logging.warning("[optimizer] Abbruch oder Fehler: %s", msg)
         return 0
 
     # Erfolg → Parameter ausgeben
@@ -166,5 +169,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         # Sauber abbrechen ohne langen Traceback (STRG+C)
-        print("\n[main] Abgebrochen (Ctrl+C).")
+        logging.info("Abgebrochen (Ctrl+C).")
         sys.exit(130)

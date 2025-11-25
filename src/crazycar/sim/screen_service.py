@@ -96,7 +96,14 @@ def draw_finish_debug(screen: pygame.Surface, info: dict) -> None:
     by `MapService.get_detect_info()`.
     Expected keys in `info`: xs, ys, minx, maxx, miny, maxy, cx, cy, vx, vy,
     nx, ny, sign, spawn_x, spawn_y
+    Only draws if CRAZYCAR_DEBUG=1 is set.
     """
+    import os
+    
+    # Only draw debug overlay if CRAZYCAR_DEBUG=1
+    if os.getenv("CRAZYCAR_DEBUG", "0") != "1":
+        return
+    
     try:
         xs = info.get("xs", []) or []
         ys = info.get("ys", []) or []

@@ -2,6 +2,10 @@ from cffi import FFI
 from pathlib import Path
 from importlib.machinery import EXTENSION_SUFFIXES
 import sys
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent
 SRC_C = ROOT / "src" / "c"
@@ -36,4 +40,4 @@ if __name__ == "__main__":
     suffix = EXTENSION_SUFFIXES[0]
     target_path = OUT_PKG / f"carsim_native{suffix}"
     ffi.compile(verbose=True, tmpdir=str(OUT_BASE), target=str(target_path))
-    print("Built:", target_path)
+    log.info("Built: %s", target_path)

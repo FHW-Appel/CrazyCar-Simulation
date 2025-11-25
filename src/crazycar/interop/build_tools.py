@@ -2,8 +2,11 @@
 from __future__ import annotations
 import sys
 import sysconfig
+import logging
 from pathlib import Path
 from cffi import FFI
+
+log = logging.getLogger(__name__)
 
 # Pfade
 ROOT     = Path(__file__).resolve().parents[3]      # .../CrazyCar-Simulation
@@ -87,7 +90,7 @@ def run_build_native(clean: bool = True) -> tuple[int, str]:
     try:
         ffi.compile(verbose=True, tmpdir=str(OUT_BASE), target=str(target))
     except Exception as e:
-        print("[build_tools] compile error:", e)
+        log.error("[build_tools] compile error: %s", e)
         rc = 1
 
     return rc, str(OUT_BASE)
@@ -106,13 +109,14 @@ def _print_symbol_probe() -> None:
             "regelungtechnik",
             "get_abstandvorne","get_abstandrechts","get_abstandlinks",
         )}
-        print("[build_tools] loaded:", getattr(mod, "__file__", "?"))
-        print("[build_tools] present symbols:", present)
+        log.info("[build_tools] loaded: %s", getattr(mod, "__file__", "?"))
+        log.debug("[build_tools] present symbols: %s", present)
     except Exception as e:
-        print("[build_tools] import/probe error:", e)
+        log.error("[build_tools] import/probe error: %s", e)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     rc, sp = run_build_native()
     ensure_build_on_path()
-    print("rc =", rc, "| sys.path +=", sp)
+    log.info("rc = %s | sys.path += %s", rc, sp)
     _print_symbol_probe()

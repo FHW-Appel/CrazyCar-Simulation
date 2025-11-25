@@ -59,6 +59,7 @@ def init_pixels(real_to_sim) -> None:
     """
     global CAR_SIZE_X, CAR_SIZE_Y, CAR_cover_size, CAR_Radstand, CAR_Spurweite
 
+    # Konvertierung durchführen: Real-Maße (cm) → Pixel
     try:
         CAR_SIZE_X     = float(real_to_sim(_CAR_X_CM))
         CAR_SIZE_Y     = float(real_to_sim(_CAR_Y_CM))
@@ -67,12 +68,17 @@ def init_pixels(real_to_sim) -> None:
         CAR_Spurweite  = float(real_to_sim(_SPURWEITE_CM))
     except Exception as e:
         log.error("init_pixels: Fehler beim Umrechnen (%r). Fallback auf Defaults.", e)
-        CAR_SIZE_X, CAR_SIZE_Y = 32.0, 16.0
+        # Fallback-Werte für robuste Simulation (typische 32x16px Sprite-Größe)
+        FALLBACK_CAR_X = 32.0
+        FALLBACK_CAR_Y = 16.0
+        FALLBACK_RADSTAND = 25.0
+        FALLBACK_SPURWEITE = 10.0
+        CAR_SIZE_X, CAR_SIZE_Y = FALLBACK_CAR_X, FALLBACK_CAR_Y
         CAR_cover_size = int(max(CAR_SIZE_X, CAR_SIZE_Y))
-        CAR_Radstand, CAR_Spurweite = 25.0, 10.0
+        CAR_Radstand, CAR_Spurweite = FALLBACK_RADSTAND, FALLBACK_SPURWEITE
         return
 
-    # Guards gegen 0/NaN
+    # Validierung: Guards gegen 0/NaN/negative Werte
     if not (CAR_SIZE_X > 0.0 and CAR_SIZE_Y > 0.0):
         log.error("CAR_SIZE_* ist 0/negativ. Fallback auf 32x16 px.")
         CAR_SIZE_X, CAR_SIZE_Y = 32.0, 16.0
