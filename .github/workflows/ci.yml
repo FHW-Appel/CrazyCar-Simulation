@@ -4,9 +4,9 @@ name: CI Unit Tests
 
 on:
   push:
-    branches: [ main, chore/native-upgrade-dll-v2 ]
+    branches: [ main, ]
   pull_request:
-    branches: [ main, chore/native-upgrade-dll-v2 ]
+    branches: [ main, ]
 
 jobs:
   unit-tests:
