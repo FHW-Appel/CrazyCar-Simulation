@@ -55,10 +55,18 @@ cover/
 # Translations
 *.mo
 *.pot
+
+# CrazyCar-specific debug/log files
 log.csv
+*.log
+*_debug.log
+lap_debug.log
+debug_python_run.log
+run_after_refactor.log
+pyout_excerpt.txt
+.crazycar_start_mode
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -202,5 +210,11 @@ Debug/
 *.lib
 *.exp
 src/py/carsim_native.*
+
+# Tools temporary outputs
+tools/*.log
+tools/*.png
+tools/__pycache__/
+
 
 

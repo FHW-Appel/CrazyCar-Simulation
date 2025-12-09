@@ -1,51 +1,69 @@
-# =============================================================================
-# crazycar/sim/modes.py  —  Modus-/Pausenlogik & Dialogsteuerung
-# -----------------------------------------------------------------------------
-# Aufgabe:
-# - Zuständig für:
-#     * Pause an/aus (SPACE)
-#     * Modus-Umschaltung Python-Regelung ↔ C-Regelung inkl. Bestätigungsdialog
-#     * Snapshot/Recovery-Trigger über UI-Buttons
-# - Hält UI-Dialog-Status (show_dialog) und aktuelle Regelung (regelung_py).
-#
-# Öffentliche API:
-# - @dataclass UIRects:
-#       aufnahmen_button, recover_button
-#       button_yes_rect, button_no_rect
-#       button_regelung1_rect, button_regelung2_rect
-# - class ModeManager:
-#       regelung_py: bool
-#       show_dialog: bool
-#       __init__(start_python: bool = True)
-#       apply(events: list[Event], rt: SimRuntime, ui: UIRects, cars: list[Car]) -> dict:
-#           # gibt Aktionen zurück, z. B. {"take_snapshot": True} oder {"recover_snapshot": True}
-#
-# Hinweise:
-# - ESC/QUIT werden NICHT hier beendet; das macht die aufrufende Ebene (loop/simulation).
-# =============================================================================
+"""Mode Manager - Pause, dialog, and control mode switching logic.
+
+Responsibilities:
+- Pause toggle (SPACE key)
+- Control mode switching: Python ↔ C with confirmation dialog
+- Snapshot/recovery triggers via UI buttons
+- Maintains dialog state (show_dialog) and current control mode (regelung_py)
+
+Public API:
+- @dataclass UIRects:
+      aufnahmen_button: pygame.Rect
+      recover_button: pygame.Rect
+      button_yes_rect: pygame.Rect
+      button_no_rect: pygame.Rect
+      button_regelung1_rect: pygame.Rect  # C control
+      button_regelung2_rect: pygame.Rect  # Python control
+      
+- class ModeManager:
+      regelung_py: bool  # True = Python control, False = C control
+      show_dialog: bool  # True = confirmation dialog visible
+      
+      __init__(start_python: bool = True)
+      
+      apply(events: list[Event], rt: SimRuntime, ui: UIRects, cars: list[Car]) -> dict:
+          Process events and return actions like:
+          {"take_snapshot": True} or {"recover_snapshot": True}
+
+Usage:
+    modes = ModeManager(start_python=True)
+    actions = modes.apply(events, runtime, ui_rects, car_list)
+    if actions.get("take_snapshot"):
+        # Handle snapshot...
+        
+Notes:
+- ESC/QUIT handled by caller (loop.py/simulation.py), not here
+- Dialog shows when switching control modes
+- Decouples logic from rendering
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 import pygame
+import logging
 
 from .state import SimRuntime
-from ..car.model import f  # nur falls wir später Skalierungen brauchen
+import os
+from ..car.model import f  # For future scaling needs
+
 
 @dataclass
 class UIRects:
+    """Collection of UI element rectangles for click detection."""
     aufnahmen_button: pygame.Rect
     recover_button: pygame.Rect
     button_yes_rect: pygame.Rect
     button_no_rect: pygame.Rect
-    button_regelung1_rect: pygame.Rect  # "c_regelung"
-    button_regelung2_rect: pygame.Rect  # "python_regelung"
+    button_regelung1_rect: pygame.Rect  # C control mode button
+    button_regelung2_rect: pygame.Rect  # Python control mode button
+
 
 class ModeManager:
-    """
-    Verwaltet Pausen-/Dialoglogik & Regelungsmodus (PY/C).
-    - Entkoppelt 'was passieren soll' von 'wie gezeichnet wird'.
-    - Liefert Actions an den Aufrufer zurück (take_snapshot, recover_snapshot).
+    """Manages pause, dialog, and control mode (Python/C).
+    
+    Decouples 'what should happen' from 'how to render it'.
+    Returns actions to caller (take_snapshot, recover_snapshot, etc.).
     """
     def __init__(self, start_python: bool = True) -> None:
         self.regelung_py: bool = start_python
@@ -54,85 +72,122 @@ class ModeManager:
         self._button_c: bool = False
 
     def apply(self, events: List, rt: SimRuntime, ui: UIRects, cars) -> Dict[str, bool]:
-        """
-        Verarbeitet Events sowohl im aktiven als auch im Pausenmodus.
-        Gibt Aktionen zurück, die der Aufrufer ausführt:
-          - take_snapshot: Momentaufnahme auslösen
-          - recover_snapshot: Wiederherstellung auslösen
+        """Process events for pause/dialog/mode switching logic.
+        
+        Handles both active and paused states. Returns action dictionary for
+        caller to execute (snapshot, recovery, mode changes).
+        
+        Args:
+            events: List of normalized SimEvent objects from EventSource
+            rt: Runtime state (paused flag, generation counter, etc.)
+            ui: UI rectangles for collision detection
+            cars: List of active Car instances (for termination on mode change)
+            
+        Returns:
+            Dict with action flags:
+                - "take_snapshot": bool - Trigger momentary snapshot
+                - "recover_snapshot": bool - Trigger snapshot recovery
         """
         actions = {"take_snapshot": False, "recover_snapshot": False}
 
         for ev in events:
             et = getattr(ev, "type", None)
 
-            # -------------------------
-            # Tasten, die immer gelten
-            # -------------------------
+            # Logger for mode actions
+            log = logging.getLogger("crazycar.sim.modes")
+
+            # Global keys (work in all states)
             if et == "SPACE":
-                # Toggle Pause
+                # Toggle pause state
                 rt.paused = not rt.paused
                 continue
 
-            # -------------------------
-            # Wenn pausiert: Dialogsteuerung
-            # -------------------------
+            # Paused state: Dialog and button control
             if rt.paused:
                 if et == "MOUSE_DOWN":
                     pos = ev.payload["pos"]
-                    # Pause per Aufnahme-Button verlassen (kein Snapshot in Pause)
+                    # Exit pause via snapshot button (no snapshot taken while paused)
                     if ui.aufnahmen_button.collidepoint(pos):
                         rt.paused = False
                         continue
-                    # Dialog: NO
+                    # Dialog: NO -> Cancel (no mode change)
                     if ui.button_no_rect.collidepoint(pos):
-                        if self._button_py:
-                            self.regelung_py = True
-                            self._button_py = False
-                        if self._button_c:
-                            self.regelung_py = False
-                            self._button_c = False
+                        log.debug("ModeManager: Dialog NO clicked at %s — canceling mode change", pos)
+                        # clear temporary selection flags, keep current mode
+                        self._button_py = False
+                        self._button_c = False
                         rt.paused = False
                         self.show_dialog = False
                         continue
-                    # Dialog: YES (Moduswechsel + akt. Car terminieren)
+                    # Dialog: YES (Mode switch → Set mode + terminate current car)
                     if ui.button_yes_rect.collidepoint(pos):
+                        log.debug("ModeManager: Dialog YES clicked at %s — applying pending selection (py=%s, c=%s)", pos, self._button_py, self._button_c)
+                        # If the user requested python_regelung, enable it
                         if self._button_py:
-                            self.regelung_py = False
-                            self._button_py = False
-                        if self._button_c:
+                            log.info("ModeManager: switching to PYTHON regulator (restart requested)")
+                            # Persist choice so a restarted simulation honors it
+                            try:
+                                path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+                                with open(path, "w", encoding="utf-8") as _f:
+                                    _f.write("1")
+                                log.debug("ModeManager: persisted start-mode file %s", path)
+                            except Exception as _e:
+                                log.warning("ModeManager: could not persist start-mode file: %r", _e)
+                            # also set env var for in-process callers (best-effort)
+                            os.environ["CRAZYCAR_START_PYTHON"] = "1"
                             self.regelung_py = True
+                            self._button_py = False
+                        # If the user requested c_regelung, disable python mode
+                        if self._button_c:
+                            log.info("ModeManager: switching to C regulator (restart requested)")
+                            try:
+                                path = os.path.join(os.getcwd(), ".crazycar_start_mode")
+                                with open(path, "w", encoding="utf-8") as _f:
+                                    _f.write("0")
+                                log.debug("ModeManager: persisted start-mode file %s", path)
+                            except Exception as _e:
+                                log.warning("ModeManager: could not persist start-mode file: %r", _e)
+                            os.environ["CRAZYCAR_START_PYTHON"] = "0"
+                            self.regelung_py = False
                             self._button_c = False
+                        # terminate current car so optimizer/spawn logic can restart
                         if cars:
-                            cars[0].alive = False
+                            try:
+                                cars[0].alive = False
+                            except Exception:
+                                # best-effort only
+                                pass
                         rt.paused = False
                         self.show_dialog = False
                         continue
-                # andere Events in Pause ignorieren
+                # Ignore other events while paused
                 continue
 
             # -------------------------
-            # Aktiver Modus (nicht pausiert)
+            # Active mode (not paused)
             # -------------------------
             if et == "MOUSE_DOWN":
                 pos = ev.payload["pos"]
-                # Aufnahme im aktiven Modus: Snapshot auslösen & in Pause gehen
+                # Snapshot in active mode: trigger snapshot & enter pause
                 if ui.aufnahmen_button.collidepoint(pos):
                     actions["take_snapshot"] = True
                     rt.paused = True
                     continue
-                # Snapshot wiederherstellen
+                # Restore snapshot
                 if ui.recover_button.collidepoint(pos):
                     actions["recover_snapshot"] = True
                     continue
-                # Dialog öffnen: Ziel python_regelung
+                # Open dialog: Target python_regelung
                 if ui.button_regelung2_rect.collidepoint(pos):
+                    log.debug("ModeManager: python button clicked at %s — opening dialog", pos)
                     self.show_dialog = True
                     rt.paused = True
                     self._button_py = True
                     self._button_c = False
                     continue
-                # Dialog öffnen: Ziel c_regelung
+                # Open dialog: Target c_regelung
                 if ui.button_regelung1_rect.collidepoint(pos):
+                    log.debug("ModeManager: c button clicked at %s — opening dialog", pos)
                     self.show_dialog = True
                     rt.paused = True
                     self._button_c = True

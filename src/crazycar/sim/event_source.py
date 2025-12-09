@@ -1,26 +1,59 @@
-# =============================================================================
-# crazycar/sim/event_source.py  —  Ereignis-Pipeline (pygame/Headless)
-# -----------------------------------------------------------------------------
-# Aufgabe:
-# - Liest rohe pygame-Events und liefert "normierte" Events (Strings + Payload),
-#   die unabhängig von pygame-Details verarbeitet werden können.
-# - Separates Polling für Resize-Events.
-# - Hält den letzten Raw-Event-Batch (z. B. für Widgets wie ToggleButton).
-#
-# Öffentliche API:
-# - class EventSource:
-#       __init__(headless: bool = False)
-#       poll() -> list[Event]:            # aktive/aktuelle Eingaben (Tasten/Maus/UI)
-#       poll_resize() -> list[Event]:     # nur VIDEORESIZE
-#       last_raw() -> list[pygame.Event]: # Roh-Events des letzten poll()-Durchlaufs
-#
-# Event-Typen (normiert, Beispiele):
-#   "QUIT", "ESC", "TOGGLE_TRACKS", "KEY_CHAR", "BACKSPACE",
-#   ggf. weitere, die von modes.ModeManager ausgewertet werden.
-#
-# Hinweise:
-# - Headless: ggf. SDL_VIDEODRIVER=dummy beachten; EventSource ist darauf vorbereitet.
-# =============================================================================
+"""Event Source - Normalized event pipeline (pygame/headless).
+
+Responsibilities:
+- Read raw pygame events and deliver normalized events
+- Events are strings + payload, independent of pygame details
+- Separate polling for resize events
+- Maintains last raw event batch for UI widgets
+
+Public API:
+- class EventSource:
+      __init__(headless: bool = False)
+      
+      poll() -> list[SimEvent]:
+          Active/current inputs (keys, mouse, UI)
+          
+      poll_resize() -> list[SimEvent]:
+          Only VIDEORESIZE events
+          
+      last_raw() -> list[pygame.Event]:
+          Raw events from last poll() cycle
+
+Event Types (normalized examples):
+- "QUIT": Window close requested
+- "ESC": Escape key pressed
+- "SPACE": Space bar pressed (pause)
+- "TOGGLE_TRACKS": T key (toggle track trails)
+- "KEY_CHAR": Alphanumeric character typed
+- "BACKSPACE": Backspace key
+- "MOUSE_DOWN": Mouse button clicked
+- "VIDEORESIZE": Window resized
+
+Usage:
+    es = EventSource(headless=False)
+    
+    # Process resize events separately
+    resize_events = es.poll_resize()
+    for event in resize_events:
+        if event.type == "VIDEORESIZE":
+            new_size = event.payload["size"]
+            
+    # Process all other events
+    events = es.poll()
+    for event in events:
+        if event.type == "SPACE":
+            toggle_pause()
+            
+    # Access raw events for UI widgets
+    raw = es.last_raw()
+    toggle_button.update(raw)
+
+Notes:
+- Headless mode: Returns empty event lists
+- Headless requires SDL_VIDEODRIVER=dummy environment variable
+- Events are consumed on poll (not replayable)
+- last_raw() provides pygame events for legacy widget code
+"""
 
 from __future__ import annotations
 from typing import List
@@ -28,13 +61,14 @@ import pygame
 
 from .state import SimEvent
 
+
 class EventSource:
-    """
-    Kapselt pygame.event.get() und normalisiert auf SimEvent.
-    - Headless: liefert stets [].
-    - poll_resize(): nur VIDEORESIZE-Ereignisse (verbraucht sie).
-    - poll(): alle übrigen Events (verbraucht sie).
-    - last_raw(): zuletzt eingelesene Raw-Events (für UI-Widgets).
+    """Encapsulates pygame.event.get() and normalizes to SimEvent.
+    
+    - Headless: Always returns []
+    - poll_resize(): Only VIDEORESIZE events (consumes them)
+    - poll(): All other events (consumes them)
+    - last_raw(): Last raw events read (for UI widgets)
     """
     def __init__(self, headless: bool = False) -> None:
         self.headless = headless
@@ -79,7 +113,7 @@ class EventSource:
                     "pos": getattr(e, "pos", (0, 0)),
                     "button": getattr(e, "button", 1),
                 }))
-            # weitere Events werden bewusst ignoriert
+            # Other events are intentionally ignored
         return out
 
     def last_raw(self) -> List[pygame.event.Event]:

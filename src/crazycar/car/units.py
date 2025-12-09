@@ -1,13 +1,13 @@
 # crazycar/car/units.py
-"""Regelt die Einheitenumrechnung zwischen Simulation und “realer” Welt. 
-    sim_to_real(px) wandelt Pixel in Zentimeter, real_to_sim(cm) zurück in Pixel. 
-    So bleibt der Rest des Codes unabhängig von der Zeichenauflösung.
+"""Unit conversion between sim pixels and real-world (cm).
+
+Assumption: Track width of 1900 cm corresponds to WIDTH pixels.
 """
 
 from __future__ import annotations
 from .constants import WIDTH
 
-_TRACK_WIDTH_CM: float = 1900.0  # Referenzbreite in cm
+_TRACK_WIDTH_CM: float = 1900.0  # Reference track width in cm
 
 
 def sim_to_real(simpx: float) -> float:

@@ -1,15 +1,9 @@
 # crazycar/car/sensors.py
-"""Sensorik (pygame-frei):
-- Raycasts für Radare (Map-Zugriff via Callback color_at)
-- Radare sammeln über einen Winkelbereich
-- Distanzen extrahieren
-- DA-Linearisierung (Bit/Volt) wie im Originalcode
-
-Simuliert die Abstandssensoren. cast_radars(surface, center, angle, spec) 
-feuert die Sensorstrahlen in die Karte und ermittelt Treffpunkte und Distanzen, 
-px_to_volt(px) linearisiert eine Pixel-Distanz zu einer “Analogspannung”, und 
-digits_from_volt(v) macht daraus die “Digitalbits”. Ergebnis sind Listen aus 
-Radar-Treffern, Distanzen und A/D-Werten für den Regler.
+"""Sensor system (pygame-free):
+- Raycasts for radar sensors (map access via color_at callback)
+- Radars scan across an angle range
+- Distance extraction
+- AD linearization (Bit/Volt) as in original code
 """
 
 from __future__ import annotations
@@ -33,21 +27,21 @@ def cast_radar(
     max_len_px: float,
     border_color: Color = BORDER_COLOR,
 ) -> Tuple[Point, int]:
-    """Ein Radarstrahl in Richtung (carangle + degree_offset).
-
-    Tastet Pixel für Pixel vor, bis Randfarbe erreicht ist oder max_len_px überschritten wird.
-
+    """Single radar beam in direction (carangle + degree_offset).
+    
+    Samples pixel by pixel until border color is reached or max_len_px exceeded.
+    
     Returns:
-        ((x, y), dist_px)  Endpunkt & gemessene Distanz in Pixel
+        ((x, y), dist_px)  Endpoint & measured distance in pixels
     """
     length = 0
     cx, cy = center
 
-    # Startpunkt
+    # Start point
     x = int(cx + math.cos(math.radians(360 - (carangle_deg + degree_offset))) * length)
     y = int(cy + math.sin(math.radians(360 - (carangle_deg + degree_offset))) * length)
 
-    # Vorwärts tasten bis Rand oder Maximaldistanz
+    # Probe forward until border or maximum distance
     while color_at((x, y)) != border_color and length < int(max_len_px):
         length += 1
         x = int(cx + math.cos(math.radians(360 - (carangle_deg + degree_offset))) * length)
@@ -67,8 +61,8 @@ def collect_radars(
     max_len_px: float | None = None,
     border_color: Color = BORDER_COLOR,
 ) -> List[Tuple[Point, int]]:
-    """Sammelt Radare über einen Winkelbereich (z. B. -60°, 0°, +60°)."""
-    # auf float normalisieren (gut für Type-Checker & Aufrufe)
+    """Collect radars across an angle range (e.g., -60°, 0°, +60°)."""
+    # Normalize to float (good for type checker & calls)
     limit: float = float(max_len_px) if max_len_px is not None else float(WIDTH * MAX_RADAR_LEN_RATIO)
 
     radars: List[Tuple[Point, int]] = []
@@ -80,17 +74,17 @@ def collect_radars(
 
 
 def distances(radars: Iterable[Tuple[Point, int]]) -> List[int]:
-    """Extrahiert nur die Distanzen in Pixel aus der Radar-Liste."""
+    """Extract only the distances in pixels from the radar list."""
     return [int(r[1]) for r in radars]
 
 
 def linearize_DA(dist_list_cm: Iterable[float]) -> List[Tuple[int, float]]:
-    """DA-Linearisierung (Bit/Volt) gemäß Originalformeln.
-
-    Formeln:
-        digital_bit = int((A / d_cm) + B)        mit A=23962, B=-20
-        analog_volt = (AV / d_cm) + BV           mit AV=58.5, BV=-0.05
-        Bei d_cm == 0 → (0, 0.0)
+    """DA linearization (Bit/Volt) according to original formulas.
+    
+    Formulas:
+        digital_bit = int((A / d_cm) + B)        with A=23962, B=-20
+        analog_volt = (AV / d_cm) + BV           with AV=58.5, BV=-0.05
+        For d_cm == 0 → (0, 0.0)
     """
     A, B = 23962.0, -20.0
     AV, BV = 58.5, -0.05

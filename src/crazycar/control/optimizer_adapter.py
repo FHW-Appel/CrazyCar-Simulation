@@ -1,23 +1,70 @@
+"""Optimizer Adapter - Bridge between optimizer and simulation/NEAT.
+
+Responsibilities:
+- Path helpers for config/interface/log files
+- Inject controller parameters into interface.py
+- Launch NEAT simulation (lazy imports for fast tests)
+- Child process entry with status communication (ESC/error/ok)
+- DLL-only mode for testing C controllers without NEAT
+
+Public API:
+- update_parameters_in_interface(params: dict) -> None:
+      Write k1, k2, k3, kp1, kp2 into interface.py source code
+      Allows dynamic parameter updates for optimization
+      
+- run_neat_simulation(genomes_config_tuple: tuple) -> None:
+      NEAT callback entry point
+      Starts simulation with given genomes and config
+      
+- run_neat_entry(status_q, params: dict, ...) -> None:
+      Child process entry with Queue communication
+      Reports 'ok', 'aborted', or 'error' status
+      Handles ESC detection and exception reporting
+
+Path Helpers:
+- here() -> str: Control module directory
+- neat_config_path() -> str: Path to config_neat.txt
+- interface_py_path() -> str: Path to interface.py
+- log_path() -> str: Path to log.csv
+
+DLL-Only Mode:
+- DLL_ONLY_DEFAULT = 1 (constant)
+- When enabled, skips NEAT and runs direct simulation
+- Looks for run_direct/run_loop/run_game/main entry points
+- Useful for testing C controllers (myFunktions.c → fahren1())
+
+Usage:
+    # Update parameters
+    update_parameters_in_interface({'k1': 1.0, 'k2': 0.5, ...})
+    
+    # Run in child process
+    run_neat_entry(queue, params, time_limit, pop_size, dll_only)
+
+Notes:
+- Parameter keys: k1, k2, k3, kp1, kp2
+- Preserves old behavior (write to interface.py source)
+- DLL mode bypasses NEAT for faster C testing
+- Status queue enables ESC abort from child → parent
+- Lazy imports reduce startup time for tests
+"""
 # src/crazycar/control/optimizer_adapter.py
-from __future__ import annotations
-"""
-Adapter-Schicht zwischen Optimizer und Simulation/NEAT.
-
-Aufgaben:
-- Pfad-Helfer für config/interface/log
-- Parameter in control/interface.py schreiben (Beibehaltung des alten Verhaltens)
-- NEAT-Simulation starten (lazy imports → Tests & Start schneller)
-- Child-Entry 'run_neat_entry' mit Statuskommunikation via Queue (ESC/Fehler/OK)
-"""
-
 import logging
 import os
 import time
-from typing import Any, List
+import inspect
+from importlib import import_module
+from typing import Any, List, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-# Beibehaltene Schlüssel (Regler-Parameter)
+# -----------------------------------------------------------------------------
+# GLOBAL SWITCH (Code)
+# 0 = Use NEAT normally
+# 1 = DLL-only (NEAT completely skipped; direct simulation)
+# -----------------------------------------------------------------------------
+DLL_ONLY_DEFAULT: int = 1  # <<— always use DLL logic
+
+# Retained keys (controller parameters)
 _DLL_PARAMETER_KEYS: List[str] = ["k1", "k2", "k3", "kp1", "kp2"]
 
 __all__ = [
@@ -33,26 +80,40 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Pfad-Helfer
+# Path helpers
 # ---------------------------------------------------------------------------
 def here() -> str:
-    """Ordner dieses Moduls: .../src/crazycar/control/"""
+    """Folder of this module: .../src/crazycar/control/"""
     return os.path.dirname(__file__)
 
 
 def neat_config_path() -> str:
-    """Pfad zu NEAT-Config (liegt im gleichen Ordner wie dieses File)."""
+    """Path to NEAT config (in same folder as this file)."""
     return os.path.abspath(os.path.join(here(), "config_neat.txt"))
 
 
 def interface_py_path() -> str:
-    """Pfad zur Controller-Datei, in die die Parameter (k1..kp2) geschrieben werden."""
+    """Path to controller file where parameters (k1..kp2) are written."""
     return os.path.abspath(os.path.join(here(), "interface.py"))
 
 
 def log_path() -> str:
-    """Pfad zur Log-Datei (log.csv) in diesem Ordner."""
+    """Path to log file (log.csv) in this folder."""
     return os.path.abspath(os.path.join(here(), "log.csv"))
+
+
+# ---------------------------------------------------------------------------
+# Internal switch: "DLL/Simulation only" active?
+# - Env var CRAZYCAR_ONLY_DLL overrides code switch.
+# ---------------------------------------------------------------------------
+def _dll_only_mode() -> bool:
+    """
+    Returns True if CRAZYCAR_ONLY_DLL is set (1/true/yes/on) OR the code switch is active.
+    """
+    v = os.getenv("CRAZYCAR_ONLY_DLL", "")
+    if v in ("1", "true", "True", "yes", "on"):
+        return True
+    return bool(int(DLL_ONLY_DEFAULT))
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +121,8 @@ def log_path() -> str:
 # ---------------------------------------------------------------------------
 def update_parameters_in_interface(k1: float, k2: float, k3: float, kp1: float, kp2: float) -> None:
     """
-    Schreibt k1..kp2 in control/interface.py (Text-Rewrite der entsprechenden Zeilen).
-    Achtung: Dieses Verfahren ist fragil, wird aber bewusst beibehalten.
+    Writes k1..kp2 into control/interface.py (text rewrite of corresponding lines).
+    Caution: This method is fragile but deliberately retained.
     """
     path = interface_py_path()
 
@@ -69,29 +130,117 @@ def update_parameters_in_interface(k1: float, k2: float, k3: float, kp1: float, 
         lines = f.readlines()
 
     replaced = set()
-    # locals() enthält k1..kp2 – damit greifen wir dynamisch auf den passenden Wert zu
     for key in _DLL_PARAMETER_KEYS:
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith(key) and "=" in stripped:
                 parts = line.split("=")
                 indent = line[: len(line) - len(line.lstrip())]
+                # locals() contains k1..kp2 – access dynamically:
                 lines[i] = f"{indent}{parts[0].strip()} = {locals()[key]}\n"
                 replaced.add(key)
                 break
 
     missing = [k for k in _DLL_PARAMETER_KEYS if k not in replaced]
     if missing:
-        log.warning("Parameter in interface.py nicht gefunden → nicht ersetzt: %s", missing)
+        log.warning("Parameters not found in interface.py → not replaced: %s", missing)
 
     with open(path, encoding="utf-8", mode="w") as f:
         f.writelines(lines)
 
-    log.debug("interface.py aktualisiert: %s", {k: locals()[k] for k in _DLL_PARAMETER_KEYS})
+    log.debug("interface.py updated: %s", {k: locals()[k] for k in _DLL_PARAMETER_KEYS})
 
 
 # ---------------------------------------------------------------------------
-# NEAT-Simulation (im Child-Prozess aufzurufen)
+# Direct simulation call (DLL-only): dynamically find entry & start
+# ---------------------------------------------------------------------------
+_CANDIDATE_MODULES: list[tuple[str, list[str]]] = [
+    # (Module, possible function names in order)
+    ("crazycar.sim.loop",        ["run_loop", "run", "main"]),
+    ("crazycar.sim.simulation",  ["run_direct", "run_game", "main"]),
+    ("crazycar.sim",             ["run_direct", "run_loop", "run", "main"]),
+]
+
+def _find_direct_entry() -> tuple[Callable[..., Any], Optional[dict]]:
+    """Find direct simulation entry point (without NEAT signature).
+    
+    Searches candidate modules for callable entry points.
+    
+    Returns:
+        Tuple (callable, default_kwargs) or raises RuntimeError with hints
+        
+    Raises:
+        RuntimeError: If no suitable entry point found
+    """
+    for mod_name, fn_names in _CANDIDATE_MODULES:
+        try:
+            mod = import_module(mod_name)
+        except Exception:
+            continue
+
+        for fn_name in fn_names:
+            fn = getattr(mod, fn_name, None)
+            if callable(fn):
+                # Inspect signature and potentially offer harmless defaults
+                try:
+                    sig = inspect.signature(fn)
+                except Exception:
+                    # Call blind if needed
+                    return fn, None
+
+                # Support optional duration parameters but don't force anything
+                kwargs: dict | None = {}
+                params = sig.parameters
+                # Only populate optional, harmless parameters
+                if "duration" in params and params["duration"].default is not inspect._empty:
+                    kwargs["duration"] = params["duration"].default
+                elif "duration_s" in params and params["duration_s"].default is not inspect._empty:
+                    kwargs["duration_s"] = params["duration_s"].default
+                elif "max_seconds" in params and params["max_seconds"].default is not inspect._empty:
+                    kwargs["max_seconds"] = params["max_seconds"].default
+                else:
+                    # If all parameters optional or none: leave kwargs empty
+                    # If required parameters exist that we don't know → next candidate
+                    required = [p for p in params.values()
+                                if p.default is inspect._empty
+                                and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+                    if required:
+                        # E.g., NEAT variant (genomes, config) → skip
+                        continue
+
+                return fn, (kwargs or None)
+
+    raise RuntimeError(
+        "No direct simulation entry found. "
+        "Please export e.g. `run_direct()` in crazycar.sim.simulation or "
+        "`run_loop()` in crazycar.sim.loop (without NEAT parameters)."
+    )
+
+
+def _run_direct_simulation() -> float:
+    """
+    Start simulation without NEAT via direct entry point.
+    Measures and returns runtime in seconds (for reference only).
+    """
+    entry, kwargs = _find_direct_entry()
+    log.info("DLL-Only mode active → starting direct simulation without NEAT: %s.%s",
+             entry.__module__, getattr(entry, "__name__", "<callable>"))
+
+    start = time.time()
+    # Tolerant call: with/without kwargs
+    if kwargs:
+        entry(**kwargs)
+    else:
+        entry()
+    end = time.time()
+
+    runtime = end - start
+    log.info("Direct simulation (DLL-Only) complete: runtime=%.3fs", runtime)
+    return runtime
+
+
+# ---------------------------------------------------------------------------
+# NEAT simulation (to be called in child process) – with DLL-only bypass
 # ---------------------------------------------------------------------------
 def run_neat_simulation(
     k1: float,
@@ -102,10 +251,22 @@ def run_neat_simulation(
     pop_size: int = 2,
 ) -> float:
     """
-    Startet eine NEAT-basierte Simulation und gibt die Laufzeit in Sekunden zurück.
-    Lazy-Imports → schneller Start & weniger harte Abhängigkeiten in Tests.
+    Starts NEAT-based simulation and returns runtime in seconds.
+    DLL-only active? → NEAT skipped, direct sim entry used.
     """
-    # Lazy-Import von NEAT
+    # ---- DLL-ONLY-BYPASS ---------------------------------------------------
+    if _dll_only_mode():
+        # (optional) Log parameters – retain old behavior
+        try:
+            with open(log_path(), encoding="utf-8", mode="a+") as f:
+                f.write(str([k1, k2, k3, kp1, kp2]) + ",")
+        except Exception as e:
+            log.debug("Could not open log.csv for parameter append (DLL-only): %r", e)
+
+        return _run_direct_simulation()
+    # -----------------------------------------------------------------------
+
+    # Lazy import of NEAT (only if NOT in DLL-only mode)
     from neat.config import Config as NeatConfig
     from neat.genome import DefaultGenome
     from neat.reproduction import DefaultReproduction
@@ -115,7 +276,7 @@ def run_neat_simulation(
     from neat.reporting import StdOutReporter
     from neat.statistics import StatisticsReporter
 
-    # Lazy-Import der Simulation
+    # Lazy import of simulation (NEAT evaluator)
     from crazycar.sim.simulation import run_simulation
 
     cfg_path = neat_config_path()
@@ -127,44 +288,47 @@ def run_neat_simulation(
         cfg_path,
     )
 
-    # Optional: pop_size aus Parametern überschreiben (falls in der Config kleiner ist)
+    # Optional: Override pop_size from parameters (if smaller in config)
     if isinstance(pop_size, int) and pop_size > 0:
         try:
             config.pop_size = pop_size
         except Exception:
-            pass  # unterschiedliche NEAT-Versionen kapseln pop_size unterschiedlich
+            pass  # Different NEAT versions encapsulate pop_size differently
 
-    # (optional) Log der Parameter – altes Verhalten
+    # (optional) Log parameters – old behavior
     try:
         with open(log_path(), encoding="utf-8", mode="a+") as f:
             f.write(str([k1, k2, k3, kp1, kp2]) + ",")
     except Exception as e:
-        log.debug("Konnte log.csv nicht zum Parameter-Append öffnen: %r", e)
+        log.debug("Could not open log.csv for parameter append: %r", e)
 
     population = Population(config)
     population.add_reporter(StdOutReporter(True))
     stats = StatisticsReporter()
     population.add_reporter(stats)
 
-    log.info("NEAT-Simulation startet: pop_size=%s config=%s", getattr(config, "pop_size", "?"), cfg_path)
+    log.info(
+        "Starting NEAT simulation: pop_size=%s config=%s",
+        getattr(config, "pop_size", "?"),
+        cfg_path,
+    )
 
     start = time.time()
-    # Achtung: run_simulation kann intern ESC → pygame.quit() → sys.exit(0) auslösen
+    # Caution: run_simulation is the NEAT evaluator (genomes, config)
     population.run(run_simulation, 1000)
     end = time.time()
 
     runtime = end - start
-    log.info("NEAT-Simulation fertig: runtime=%.3fs", runtime)
+    log.info("NEAT simulation complete: runtime=%.3fs", runtime)
     return runtime
 
 
 # ---------------------------------------------------------------------------
-# Child-Entry mit Statuskommunikation (für ESC-Abbruch)
+# Child entry with status communication (for ESC abort)
 # ---------------------------------------------------------------------------
 def _queue_close_safe(q: Any) -> None:
-    """Schließt die Child-Seite der Queue robust, damit Messages sicher gespült werden."""
+    """Close child-side of queue robustly to ensure messages are flushed."""
     try:
-        # mp.Queue auf Windows hat close/join_thread
         if hasattr(q, "close"):
             q.close()
         if hasattr(q, "join_thread"):
@@ -175,11 +339,10 @@ def _queue_close_safe(q: Any) -> None:
 
 def run_neat_entry(queue: Any, k1: float, k2: float, k3: float, kp1: float, kp2: float, pop_size: int = 2) -> None:
     """
-    Wrapper um run_neat_simulation, der dem Elternprozess einen Status sendet:
+    Wrapper around run_neat_simulation that sends status to parent process:
       - {"status": "ok",      "runtime": <float>}
-      - {"status": "aborted"} (bei ESC/SystemExit/KeyboardInterrupt)
+      - {"status": "aborted"} (on ESC/SystemExit/KeyboardInterrupt)
       - {"status": "error",   "error": "...repr..."}
-    WICHTIG: KEIN os._exit() → sonst gehen Queue-Messages verloren. Sauber returnen!
     """
     try:
         runtime = run_neat_simulation(k1, k2, k3, kp1, kp2, pop_size=pop_size)
@@ -187,9 +350,8 @@ def run_neat_entry(queue: Any, k1: float, k2: float, k3: float, kp1: float, kp2:
             queue.put({"status": "ok", "runtime": float(runtime)})
         finally:
             _queue_close_safe(queue)
-            # win/spawn: kurzen Moment geben, damit der Feeder flushen kann
-            time.sleep(0.02)
-        return  # sauberer Child-Exit
+            time.sleep(0.02)  # win/spawn: Let feeder flush
+        return
 
     except (KeyboardInterrupt, SystemExit):
         try:
@@ -197,7 +359,7 @@ def run_neat_entry(queue: Any, k1: float, k2: float, k3: float, kp1: float, kp2:
         finally:
             _queue_close_safe(queue)
             time.sleep(0.02)
-        return  # sauberer Child-Exit
+        return
 
     except Exception as e:
         try:
@@ -205,4 +367,4 @@ def run_neat_entry(queue: Any, k1: float, k2: float, k3: float, kp1: float, kp2:
         finally:
             _queue_close_safe(queue)
             time.sleep(0.02)
-        return  # sauberer Child-Exit
+        return

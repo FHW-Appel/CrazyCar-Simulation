@@ -1,13 +1,12 @@
 # crazycar/car/serialization.py
-"""Serialisierung des Fahrzeugzustands (pygame-frei).
+"""Vehicle state serialization (pygame-free).
 
-Erzeugt aus einem Fahrzeugzustand ein JSON-/pickle-taugliches Dictionary
-("Dict"). Damit lassen sich Momentaufnahmen speichern und später wieder laden.
+Creates a JSON/pickle-compatible dictionary from vehicle state.
+Allows saving snapshots and restoring them later.
 
-Hinweis „Recover nur korrekter“:
-Neben den bisherigen Feldern werden jetzt optional auch `power`, `radangle`,
-`fwert` und `swert` mit ausgegeben, wenn sie vorhanden/übergeben sind.
-So kann beim Wiederherstellen der Zustand exakter rekonstruiert werden.
+Note "Recover more accurate":
+In addition to previous fields, now optionally outputs `power`, `radangle`,
+`fwert` and `swert` if present. This allows more exact state reconstruction.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ Radar = Tuple[Point, int]          # ((x, y), dist_px)
 
 
 def _listify_point(p: Point) -> List[float]:
-    """Sicher als [x, y] mit float-Werten ausgeben."""
+    """Safely output as [x, y] with float values."""
     return [float(p[0]), float(p[1])]
 
 
@@ -42,17 +41,17 @@ def serialize_state(
     distance_px: float,
     time_s: float,
     *,
-    f_scale: float = 1.0,  # Position wie im Original durch f skalieren
-    # ---- NEU/optional: genauere Wiederherstellung ----
+    f_scale: float = 1.0,  # Position scaled by f as in original
+    # ---- NEW/optional: more precise recovery ----
     power: float | None = None,
     radangle: float | None = None,
     fwert: float | None = None,
     swert: float | None = None,
 ) -> Dict[str, Any]:
-    """Baut ein JSON-/pickle-taugliches Dict aus den übergebenen Werten.
-
-    Pflichtfelder bleiben unverändert, optionale Felder werden nur hinzugefügt,
-    wenn sie nicht None sind → rückwärtskompatibel.
+    """Build JSON/pickle-compatible dict from provided values.
+    
+    Required fields remain unchanged, optional fields are only added if not None
+    → backward compatible.
     """
     pos_out = (
         [float(position_px[0]) / f_scale, float(position_px[1]) / f_scale]
@@ -71,7 +70,7 @@ def serialize_state(
         "time": float(time_s),
     }
 
-    # Optional anhängen (nur wenn gesetzt), damit alte Snapshots weiterhin gültig sind
+    # Optionally append (only if set), so old snapshots remain valid
     if power is not None:
         out["power"] = float(power)
     if radangle is not None:
@@ -85,10 +84,10 @@ def serialize_state(
 
 
 def serialize_car(car: Any, *, f_scale: float = 1.0) -> Dict[str, Any]:
-    """Bequemer Wrapper für ein Car-Objekt (erwartete Attribute wie im Modell).
-
-    Nutzt getattr(..., None) für optionale Felder → wenn ein Attribut fehlt,
-    wird es einfach nicht in das Ergebnis-Dict aufgenommen.
+    """Convenient wrapper for a Car object (expected attributes as in model).
+    
+    Uses getattr(..., None) for optional fields → if an attribute is missing,
+    it is simply not included in the result dict.
     """
     return serialize_state(
         position_px=car.position,
@@ -100,7 +99,7 @@ def serialize_car(car: Any, *, f_scale: float = 1.0) -> Dict[str, Any]:
         distance_px=car.distance,
         time_s=car.time,
         f_scale=f_scale,
-        # ---- NEU/optional für „Recover korrekter“ ----
+        # ---- NEW/optional for "recover correctly" ----
         power=getattr(car, "power", None),
         radangle=getattr(car, "radangle", None),
         fwert=getattr(car, "fwert", None),
@@ -109,7 +108,7 @@ def serialize_car(car: Any, *, f_scale: float = 1.0) -> Dict[str, Any]:
 
 
 def to_json(data: Dict[str, Any], *, indent: int | None = None) -> str:
-    """Optional: Dict als JSON-String ausgeben (für Logging/Debug)."""
+    """Optional: Output dict as JSON string (for logging/debugging)."""
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"), indent=indent)
 
 
