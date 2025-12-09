@@ -1,3 +1,29 @@
+"""Vehicle Spawn Utilities - Initialization at Start Position.
+
+This module creates Car instances from MapService spawn data.
+
+Main Function:
+- spawn_from_map(): Converts spawn point → Car instance
+
+Coordinate Conversion:
+- MapService provides CENTER position (midpoint)
+- Car constructor expects TOP-LEFT (upper left corner)
+- Conversion: pos = [spawn.x - cover_size/2, spawn.y - cover_size/2]
+
+Angle Calculation:
+1. Preferred: angle_deg from MapService.detect_info (finish line detection)
+2. Fallback: spawn.angle_deg (configuration file)
+3. Car nose points TOWARDS finish line (important for correct direction)
+
+Constants:
+- DEFAULT_CAR_COVER_SIZE: 32px (fallback sprite size)
+- MIN_PIXELS_FOR_DETECTION: 0 (minimum pixels for valid detection)
+
+See Also:
+- map_service.py: get_spawn(), get_detect_info()
+- model.py: Car.__init__()
+- finish_detection.py: principal_direction(), choose_forward_sign()
+"""
 from __future__ import annotations
 from typing import List
 import logging
@@ -5,6 +31,14 @@ import logging
 import pygame
 
 from ..car.model import Car
+
+# Constants for spawn logic
+DEFAULT_CAR_COVER_SIZE = 32  # Pixels - Fallback if constants not available
+MIN_PIXELS_FOR_DETECTION = 0  # Minimum pixels for valid finish line detection
+PYGAME_ANGLE_OFFSET = 360.0  # Pygame angle convention (0°=right, counterclockwise)
+CENTER_TO_TOPLEFT_DIVISOR = 2  # Divide cover_size by 2 to convert center to top-left
+DEFAULT_CAR_INITIAL_POWER = 20  # Default power setting for spawned cars
+DEFAULT_CARANGLE_FALLBACK = 0.0  # Safety fallback angle if all detection fails (0° = right)
 
 log = logging.getLogger("crazycar.sim.spawn_utils")
 
@@ -27,22 +61,20 @@ def spawn_from_map(map_service) -> List[Car]:
         - Angle conversion: MapService uses atan2 convention, Car uses pygame convention
         - Falls back to spawn.angle_deg if detection info unavailable
     """
-    # Auto-Cover-Size aus Konstanten holen (Fallback 32px für alte Setups)
+    # Get car cover size from constants (fallback for old setups).
     try:
         from ..car.constants import CAR_cover_size
     except Exception:
-        CAR_cover_size = 32  # Standard-Größe für Auto-Sprite
+        CAR_cover_size = DEFAULT_CAR_COVER_SIZE  # Default size for car sprite
 
     spawn = map_service.get_spawn()
     
-    # Koordinatenumrechnung: Spawn ist Mittelpunkt, Car braucht linke obere Ecke
-    half_px = (CAR_cover_size * 0.5)
+    # Coordinate conversion: Spawn is center point, Car needs top-left corner
+    half_px = CAR_cover_size / CENTER_TO_TOPLEFT_DIVISOR
     pos = [spawn.x_px - half_px, spawn.y_px - half_px]
 
-    # Winkel bevorzugt aus MapService holen (hat bereits korrekte Fahrtrichtung
-    # aus Ziellinienerkennung berechnet). Nur bei Fehler auf spawn.angle_deg
-    # zurückfallen. NICHT neu aus spawn→center berechnen, da dieser Vektor
-    # oft die inverse Fahrtrichtung ist (Spawn liegt versetzt zur Linie).
+    # Prefer angle from MapService (correct direction from finish line detection)
+    # DO NOT recalculate from spawn→center vector (often gives inverse direction)
     map_angle = float(spawn.angle_deg)
     info = None
     try:
@@ -53,35 +85,31 @@ def spawn_from_map(map_service) -> List[Car]:
     except Exception:
         info = None
 
-    # Auto-Nase soll ZUR erkannten Ziellinie zeigen: Garantiert, dass Fahrzeug
-    # die rote Linie anfährt. Winkel aus spawn→Linienmittelpunkt berechnen,
-    # dann ggf. 180°-Flip aus Probe-Sampling anwenden.
+    # Car nose points TOWARDS finish line (guarantees approach to red line)
     try:
         sim_ang = None
-        MIN_PIXELS_FOR_DETECTION = 0  # Mindestanzahl roter Pixel für valide Detection
         if info and info.get("n", 0) > MIN_PIXELS_FOR_DETECTION:
             cx = float(info.get("cx", 0.0))
             cy = float(info.get("cy", 0.0))
             
-            # Vektor spawn → Linienmittelpunkt
+            # Vector spawn → line center
             from math import atan2, degrees
             dx_line = cx - float(spawn.x_px)
             dy_line = cy - float(spawn.y_px)
             
-            # Pygame-Konvention: 0° = rechts, 90° = unten (Y-Achse nach unten)
-            PYGAME_ANGLE_OFFSET = 360.0
-            sim_ang = (PYGAME_ANGLE_OFFSET - degrees(atan2(dy_line, dx_line))) % 360.0
+            # Pygame convention: 0° = right, 90° = down (Y-axis downward)
+            sim_ang = (PYGAME_ANGLE_OFFSET - degrees(atan2(dy_line, dx_line))) % PYGAME_ANGLE_OFFSET
             angle = float(sim_ang)
             log.debug("Spawn angle computed from spawn->line center: %.3f° (cx,cy)=(%.1f,%.1f)", angle, cx, cy)
         else:
-            # Fallback: MapService-Winkel konvertieren (wenn Detection-Info fehlt)
-            angle = (360.0 - float(map_angle)) % 360.0
+            # Fallback: Convert MapService angle (if detection info missing)
+            angle = (PYGAME_ANGLE_OFFSET - float(map_angle)) % PYGAME_ANGLE_OFFSET
             log.debug("Spawn angle fallback from map_angle -> carangle: %.1f -> %.1f", float(map_angle), angle)
     except Exception:
-        # Letzter Fallback: map_angle direkt konvertieren
+        # Last fallback: Convert map_angle directly
         try:
-            angle = (360.0 - float(map_angle)) % 360.0
+            angle = (PYGAME_ANGLE_OFFSET - float(map_angle)) % PYGAME_ANGLE_OFFSET
         except Exception:
-            angle = 0.0  # Sicherheits-Fallback: 0° = nach rechts
+            angle = DEFAULT_CARANGLE_FALLBACK
 
-    return [Car(pos, angle, 20, False, [], [], 0, 0)]
+    return [Car(pos, angle, DEFAULT_CAR_INITIAL_POWER, False, [], [], 0, 0)]

@@ -1,32 +1,46 @@
-# =============================================================================
-# crazycar/sim/state.py  —  Konfiguration & Laufzeit-Zustände
-# -----------------------------------------------------------------------------
-# Aufgabe:
-# - Kapselt statische Einstellungen (FPS, Seeds, Headless, Hard-Exit) in SimConfig.
-# - Kapselt dynamische Laufzeit-Zustände (Fenstergröße, Pause-Flag, Counter, Text-Eingabe,
-#   aktuelle Generation, drawtracks) in SimRuntime.
-# - Hilfsfunktionen für Defaults und deterministische Seeds.
-#
-# Öffentliche API:
-# - class SimConfig:
-#       .fps: int
-#       .seed: int
-#       .headless: bool
-#       .hard_exit: bool
-# - class SimRuntime:
-#       .window_size: tuple[int,int]
-#       .paused: bool
-#       .drawtracks: bool
-#       .file_text: str
-#       .current_generation: int
-#       .counter: int
-#       start(cfg: SimConfig) -> None
-# - build_default_config() -> SimConfig
-# - seed_all(seed: int) -> None
-#
-# Hinweise:
-# - SimRuntime hält KEINE Pygame-Objekte; nur simple Python-Daten → gut testbar.
-# =============================================================================
+"""Simulation Configuration and Runtime State.
+
+Responsibilities:
+- SimConfig: Static settings (FPS, seeds, headless mode, exit behavior)
+- SimRuntime: Dynamic runtime state (window size, pause flag, counter, text input,
+               current generation, track drawing)
+- Helper functions for defaults and deterministic seeding
+
+Public API:
+- class SimConfig:
+      fps: int              # Target frames per second
+      seed: int             # Random seed for reproducibility
+      headless: bool        # Run without display
+      hard_exit: bool       # Force sys.exit() on quit
+      
+- class SimRuntime:
+      window_size: tuple[int,int]    # Current display resolution
+      paused: bool                   # Simulation paused flag
+      drawtracks: bool               # Show vehicle trails
+      file_text: str                 # Text input buffer
+      current_generation: int        # NEAT generation number
+      counter: int                   # Frame counter
+      quit_flag: bool                # Quit requested
+      
+      start(cfg: SimConfig) -> None  # Initialize from config
+      
+- build_default_config() -> SimConfig
+      Creates default configuration from environment variables
+      
+- seed_all(seed: int) -> None
+      Seeds random and numpy for reproducibility
+
+Usage:
+    cfg = build_default_config()
+    rt = SimRuntime()
+    rt.start(cfg)
+    seed_all(cfg.seed)
+    
+Notes:
+- SimRuntime holds NO pygame objects, only Python primitives → easily testable
+- Reads environment variables for defaults (SEED, HEADLESS, HARD_EXIT)
+- DEFAULT_WIDTH/HEIGHT imported from car.model (fallback: 1920x1080)
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -34,7 +48,7 @@ from typing import Dict, Any, Tuple, Optional, Literal
 import os
 import random
 
-# Fallback, falls car.model noch nicht importierbar ist
+# Fallback if car.model not yet importable.
 try:
     from ..car.model import WIDTH as DEFAULT_WIDTH, HEIGHT as DEFAULT_HEIGHT
 except Exception:
@@ -48,15 +62,33 @@ EventType = Literal[
 
 @dataclass(slots=True)
 class SimEvent:
+    """Normalized simulation event with type and payload data.
+    
+    Attributes:
+        type: Event category (QUIT, KEYDOWN, VIDEORESIZE, etc.)
+        payload: Additional event data (key codes, dimensions, etc.)
+    """
     type: EventType
     payload: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass(slots=True)
 class SimConfig:
+    """Simulation configuration loaded from environment variables.
+    
+    Attributes:
+        headless: Run without pygame display (default: False)
+        fps: Target frame rate (default: 100 FPS, replaces time_flip=0.01)
+        seed: Random seed for reproducibility (default: 1234)
+        hard_exit: Call sys.exit() on quit (default: True)
+        window_size: Initial window dimensions (default: 1920x1080)
+        assets_path: Override assets directory (optional)
+        regelung_py: Start in Python controller mode (default: True)
+        map_asset: Map filename (default: "Racemap.png")
+    """
     headless: bool = False
-    fps: int = 100                 # ersetzt time_flip=0.01 → 100 FPS
+    fps: int = 100                 # Replaces time_flip=0.01 → 100 FPS
     seed: int = 1234
-    hard_exit: bool = True         # entspricht CRAZYCAR_HARD_EXIT
+    hard_exit: bool = True         # Corresponds to CRAZYCAR_HARD_EXIT
     window_size: Tuple[int, int] = (DEFAULT_WIDTH, DEFAULT_HEIGHT)
     assets_path: Optional[str] = None
     out_dir: Optional[str] = None
@@ -65,18 +97,33 @@ class SimConfig:
 
 @dataclass(slots=True)
 class SimRuntime:
+    """Runtime state tracking simulation progress and global flags.
+    
+    Mutable container for frame counter, pause state, and UI toggles.
+    Replaces former module-level globals from simulation.py.
+    
+    Attributes:
+        tick: Frame counter (incremented each update)
+        dt: Timestep in seconds (1.0 / fps)
+        quit_flag: Signals exit request
+        paused: Simulation pause toggle
+        drawtracks: Draw trajectory trails toggle
+        file_text: Status text for UI display
+        current_generation: NEAT generation counter (for HUD)
+        window_size: Current window dimensions (width, height)
+    """
     tick: int = 0
     dt: float = 0.0                # 1.0 / fps
     quit_flag: bool = False
 
-    # ehemalige Modul-Globals aus simulation.py
+    # Former module-level globals from simulation.py
     paused: bool = False
     drawtracks: bool = False
     file_text: str = ""
     current_generation: int = 0
     window_size: Tuple[int, int] = field(default_factory=lambda: (DEFAULT_WIDTH, DEFAULT_HEIGHT))
 
-    # Hilfszähler analog zum bisherigen Code
+    # Helper counter analogous to previous code
     counter: int = 0
 
     def start(self, cfg: "SimConfig") -> None:
@@ -89,6 +136,25 @@ class SimRuntime:
         self.counter = 0
 
 def build_default_config(env: Dict[str, str] | None = None) -> SimConfig:
+    """Build SimConfig from environment variables.
+    
+    Reads configuration from environment with sensible defaults:
+    - HEADLESS, SDL_VIDEODRIVER: Headless mode toggle
+    - CRAZYCAR_FPS: Frame rate (default 100)
+    - CRAZYCAR_SEED: Random seed (default 1234)
+    - CRAZYCAR_HARD_EXIT: Hard exit on crash (default 1)
+    - CRAZYCAR_WIDTH/HEIGHT: Window dimensions
+    - CRAZYCAR_ASSETS_DIR: Asset folder path
+    - CRAZYCAR_OUT_DIR: Output folder path
+    - CRAZYCAR_START_PAUSED: Start in paused state
+    - CRAZYCAR_DRAWTRACKS: Enable driving traces
+    
+    Args:
+        env: Environment dict (defaults to os.environ)
+        
+    Returns:
+        SimConfig instance with merged settings.
+    """
     e = env or os.environ
     headless = e.get("HEADLESS", "0") == "1" or e.get("SDL_VIDEODRIVER") == "dummy"
     fps = int(e.get("CRAZYCAR_FPS", "100"))
@@ -111,6 +177,17 @@ def build_default_config(env: Dict[str, str] | None = None) -> SimConfig:
     )
 
 def seed_all(seed: int) -> None:
+    """Seed all random number generators for reproducibility.
+    
+    Seeds both Python's random and NumPy (if available) with the same seed
+    to ensure deterministic behavior across runs.
+    
+    Args:
+        seed: Integer seed value (typically from SimConfig.seed)
+        
+    Note:
+        Sets global RNG state for random and numpy.random
+    """
     random.seed(seed)
     try:
         import numpy as np  # type: ignore

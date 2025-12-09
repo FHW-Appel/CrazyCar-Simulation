@@ -6,8 +6,6 @@ import pygame
 
 log = logging.getLogger("crazycar.sim.finish_detection")
 
-log = logging.getLogger("crazycar.sim.finish_detection")
-
 
 def principal_direction(xs: List[int], ys: List[int], cx: float, cy: float) -> Tuple[float, float]:
     """Compute normalized principal direction (tangent) of a point cloud using PCA.
@@ -40,29 +38,29 @@ def principal_direction(xs: List[int], ys: List[int], cx: float, cy: float) -> T
         syy += dy * dy
         sxy += dx * dy
 
-    # Normalisierung durch (n-1) für Stichproben-Kovarianz
+    # Normalization by (n-1) for sample covariance
     if n > 1:
         sxx /= (n - 1.0)
         syy /= (n - 1.0)
         sxy /= (n - 1.0)
 
-    # Eigenwert berechnen: größter Eigenwert λ1 = (trace + √disc) / 2
+    # Calculate eigenvalue: largest eigenvalue λ1 = (trace + √disc) / 2
     trace = sxx + syy
     det = sxx * syy - sxy * sxy
     disc = max(0.0, trace * trace - 4.0 * det)  # Diskriminante ≥ 0 sicherstellen
     sqrt_disc = math.sqrt(disc)
     l1 = 0.5 * (trace + sqrt_disc)
 
-    # Eigenvektor zum größten Eigenwert: [sxy, λ1 - sxx]
+    # Eigenvector to largest eigenvalue: [sxy, λ1 - sxx]
     vx = sxy
     vy = l1 - sxx
     
     # Degenerierten Fall abfangen (alle Punkte identisch)
-    EPSILON = 1e-12  # Numerische Toleranz für Nullvektoren
+    EPSILON = 1e-12  # Numeric tolerance for zero vectors
     if abs(vx) + abs(vy) < EPSILON:
         vx, vy = 1.0, 0.0
 
-    # Auf Länge 1 normalisieren
+    # Normalize to length 1
     nrm = math.hypot(vx, vy) or 1.0
     vx /= nrm
     vy /= nrm
@@ -87,7 +85,7 @@ def select_largest_component(xs: List[int] | None, ys: List[int] | None) -> Tupl
     if not xs or not ys:
         return ([], [])
 
-    # Set für schnelle Nachbarschaftssuche
+    # Set for fast neighbor search
     coords = set(zip(xs, ys))
     if not coords:
         return ([], [])
@@ -103,7 +101,7 @@ def select_largest_component(xs: List[int] | None, ys: List[int] | None) -> Tupl
         comp = [start]
         queue = [start]
         
-        # Breitensuche für aktuelle Komponente
+        # Breadth-first search for current component
         while queue:
             x0, y0 = queue.pop()
             for dx, dy in NEIGHBORS_4_CONNECTED:
@@ -113,7 +111,7 @@ def select_largest_component(xs: List[int] | None, ys: List[int] | None) -> Tupl
                     queue.append((nx, ny))
                     comp.append((nx, ny))
         
-        # Größte Komponente merken
+        # Remember largest component
         if len(comp) > best_size:
             best_size = len(comp)
             best_comp = comp
@@ -159,7 +157,7 @@ def collect_red_pixels_fast(surface: "pygame.Surface", target_rgb: Tuple[int, in
             log.debug("Finish-Line (fast): rote Pixel ~ %d, Beispielpunkte: (%d,%d), (%d,%d)", len(xs), xs[0], ys[0], xs[min(5, len(xs)-1)], ys[min(5, len(ys)-1)])
         return (xs, ys)
     except Exception as e:
-        log.debug("Finish-Line (fast) nicht verfügbar: %s", e)
+        log.debug("Finish-Line (fast) not available: %s", e)
         return (None, None)
 
 
@@ -182,10 +180,10 @@ def collect_red_pixels_slow(surface: "pygame.Surface", target_rgb: Tuple[int, in
     xs: list[int] = []
     ys: list[int] = []
 
-    # Quadrierte Toleranz für schnelleren Vergleich (vermeidet sqrt)
+    # Squared tolerance for faster comparison (avoids sqrt)
     tol2 = tol * tol
 
-    # Surface locken für thread-sicheren Zugriff
+    # Lock surface for thread-safe access
     surface.lock()
     try:
         for y in range(0, h, step):
@@ -228,30 +226,30 @@ def choose_forward_sign(surface: "pygame.Surface", cx: float, cy: float, vx: flo
     """
     w, h = surface.get_width(), surface.get_height()
 
-    # Scoring-Funktion: Bestraft Richtung, die zu Rand zeigt
+    # Scoring function: Penalizes direction pointing toward border
     def score(sign: int) -> float:
-        """Berechnet Penalty-Score für gegebene Richtung (+1 oder -1)."""
+        """Compute penalty score for given direction (+1 or -1)."""
         s = 0.0
         for k in range(sample_start, sample_end, sample_step):
             x = int(cx + sign * vx * k)
             y = int(cy + sign * vy * k)
             
-            # Out-of-bounds = hohe Strafe (vermutlich Richtung Kartenrand)
+            # Out-of-bounds = high penalty (likely toward map border)
             OUT_OF_BOUNDS_PENALTY = 10.0
             if x < 0 or y < 0 or x >= w or y >= h:
                 s += OUT_OF_BOUNDS_PENALTY
                 continue
             
-            # Farbe prüfen: Weiß (Rand) = Strafe
+            # Check color: White (border) = penalty
             r, g, b, *_ = surface.get_at((x, y))
             dr = r - border_rgb[0]
             dg = g - border_rgb[1]
             db = b - border_rgb[2]
             
-            # Toleranz 60 Pixel für "nah an weiß" (60² = 3600)
+            # Tolerance 60 pixels for "close to white" (60² = 3600)
             BORDER_COLOR_TOLERANCE_SQ = 60 * 60
             if (dr * dr + dg * dg + db * db) < BORDER_COLOR_TOLERANCE_SQ:
-                s += 1.0  # Strafe pro Rand-Pixel
+                s += 1.0  # Penalty per border pixel
         return s
 
     s_pos = score(+1)

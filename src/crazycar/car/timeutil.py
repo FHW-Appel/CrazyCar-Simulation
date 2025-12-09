@@ -1,15 +1,15 @@
 # crazycar/car/timeutil.py
-"""Zeit-Helfer (optionale pygame-Abhängigkeit).
+"""Time helpers (optional pygame dependency).
 
-- delay_ms(ms): wartet ~ms Millisekunden.
-  * bevorzugt pygame-Clock (kompatibel zu deinem Original)
-  * Fallback auf time.sleep(), wenn pygame fehlt/nicht init
+- delay_ms(ms): waits approximately ms milliseconds.
+  * prefers pygame Clock (compatible with original)
+  * fallback to time.sleep() if pygame missing/not initialized
 """
 
 from __future__ import annotations
 from typing import Final
 
-# weiche Abhängigkeit: pygame nur importieren, wenn vorhanden
+# Soft dependency: only import pygame if available
 try:
     import pygame  # type: ignore
     _HAVE_PYGAME = True
@@ -19,42 +19,42 @@ except Exception:
 
 import time
 
-# Ziel-Tickrate (nur relevant für pygame-Loop)
+# Target tick rate (only relevant for pygame loop)
 _PYGAME_TICKS_PER_SEC: Final[int] = 100
 
 
 def _delay_ms_pygame(ms: int) -> None:
-    """Warten per pygame.Clock – wie im Originalcode."""
+    """Wait via pygame.Clock – as in original code."""
     clock = pygame.time.Clock()
     start = pygame.time.get_ticks()
     while pygame.time.get_ticks() - start < ms:
-        # Begrenze Loop auf ~100 Hz, damit CPU nicht glüht
+        # Limit loop to ~100 Hz to prevent CPU from burning
         clock.tick(_PYGAME_TICKS_PER_SEC)
 
 
 def _delay_ms_sleep(ms: int) -> None:
-    """Fallback ohne pygame: einfache Sleep-Schleife."""
+    """Fallback without pygame: simple sleep loop."""
     target = time.perf_counter() + (ms / 1000.0)
-    # Eine kurze Sleepschleife ist effizienter als Busy-Wait
+    # A short sleep loop is more efficient than busy-wait
     while True:
         now = time.perf_counter()
         if now >= target:
             break
-        # kleine Scheibe schlafen; passt sich Ziel an
+        # Sleep small slice; adapts to target
         remaining = target - now
-        time.sleep(min(remaining, 0.005))  # max 5ms Sleep-Granularität
+        time.sleep(min(remaining, 0.005))  # Max 5ms sleep granularity
 
 
 def delay_ms(ms: int) -> None:
-    """Wartet ca. ms Millisekunden.
+    """Wait approximately ms milliseconds.
 
-    Nutzt pygame, wenn importiert *und* initialisiert; sonst Fallback auf time.sleep().
+    Uses pygame if imported *and* initialized; otherwise fallback to time.sleep().
     """
     if ms <= 0:
         return
 
     if _HAVE_PYGAME:
-        # pygame muss initialisiert sein (sonst get_ticks() == 0 in manchen Umgebungen)
+        # pygame must be initialized (otherwise get_ticks() == 0 in some environments)
         try:
             if pygame.get_init():
                 _delay_ms_pygame(ms)

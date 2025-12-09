@@ -1,35 +1,46 @@
-# =============================================================================
-# crazycar/sim/simulation.py  —  Fassade / Sammelzugang
-# -----------------------------------------------------------------------------
-# Aufgabe:
-# - Startpunkt für einen einzelnen Simulationslauf (NEAT-Callback).
-# - Initialisiert Konfiguration/Runtime (state.py) und Pygame-Fenster (lazy).
-# - Erzeugt UI-Geometrie (Buttons/Dialog/Toggles) und Service-Objekte.
-# - Spawnt Fahrzeuge & NEAT-Netze.
-# - Delegiert die eigentliche Hauptschleife an loop.run_loop(...).
-#
-# Öffentliche API (dieses Moduls):
-# - run_simulation(genomes, config): Startet genau einen Simulationslauf.
-# - run_direct(duration_s: float | None = None): Startet einen Lauf OHNE NEAT
-#   (wird z. B. im DLL-Only-Modus vom Optimizer-Adapter aufgerufen).
-#
-# Wichtige Helfer:
-# - _finalize_exit(hard_kill: bool): Garantierter/Weicher Prozess-Exit.
-# - _get_or_create_screen(size): Re-uses/erstellt Pygame-Window (verhindert Doppel-Fenster).
-#
-# Abhängigkeiten:
-# - state.SimConfig, state.SimRuntime, state.build_default_config, state.seed_all
-# - event_source.EventSource (normierte Events; Headless-fähig)
-# - modes.ModeManager, modes.UIRects (Pausen-/Moduslogik, Dialogsteuerung)
-# - map_service.MapService (Laden/Resize/Blit der Karte)
-# - loop.run_loop, loop.UICtx (zentraler Frame-Loop + UI-Kontext)
-# - toggle_button.ToggleButton (UI-Widget)
-#
-# Tests:
-# - Unit: ModeManager, EventSource-Parsing, MapService-Resize, UICtx-Factories (reine Python-Tests).
-# - Integration: loop.run_loop mit SDL_VIDEODRIVER=dummy (Headless), feste Seeds.
-# - E2E/Smoke: kurzer Sim-Lauf, Artefakte (z. B. CSV/Screenshots) via snapshot_service verifizieren.
-# =============================================================================
+"""Simulation Facade - High-Level Entry Point.
+
+This module provides the main entry point for simulation runs, typically
+called by NEAT optimizer for each generation.
+
+Main Functions:
+- run_simulation(): Start a simulation run with NEAT genomes
+- run_direct(): Start a simulation run without NEAT (direct mode)
+
+Responsibilities:
+1. Configuration: Initialize SimConfig, SimRuntime from environment
+2. Pygame Setup: Create display window (lazy, reusable)
+3. UI Setup: Create buttons, dialogs, toggle widgets
+4. Service Initialization: MapService, EventSource, ModeManager
+5. Vehicle Spawning: Create cars at start position
+6. NEAT Integration: Connect genomes to neural network controllers
+7. Loop Delegation: Call run_loop() for main game loop
+8. Exit Handling: Cleanup and process termination
+
+Helper Functions:
+- _finalize_exit(): Guaranteed/soft process exit
+- _get_or_create_screen(): Reuse/create pygame window
+
+Constants:
+- LOG_THRESHOLD_SECONDS: 20 (warning threshold for long loops)
+
+Dependencies:
+- state: SimConfig, SimRuntime, build_default_config, seed_all
+- event_source: EventSource (normalized events, headless-capable)
+- modes: ModeManager, UIRects (pause/mode logic, dialog control)
+- map_service: MapService (map loading/resize/blit)
+- loop: run_loop, UICtx (central frame loop + UI context)
+- toggle_button: ToggleButton (UI widget)
+
+Testing:
+- Unit: ModeManager, EventSource parsing, MapService resize
+- Integration: run_loop with SDL_VIDEODRIVER=dummy (headless), fixed seeds
+- E2E/Smoke: Short simulation runs, verify artifacts (CSV/screenshots)
+
+See Also:
+- loop.py: Main frame loop implementation
+- control/interface.py: NEAT genome → car control integration
+"""
 
 from __future__ import annotations
 import sys
@@ -41,18 +52,18 @@ import neat
 import pygame
 import pygame.freetype
 
-from ..car.model import Car, WIDTH, HEIGHT, f           # sim_to_real wird hier nicht benötigt
+from ..car.model import Car, WIDTH, HEIGHT, f           # sim_to_real not needed here
 from .toggle_button import ToggleButton
 
-# Zentrale Zustände/Konfiguration
+# Central states/configuration
 from .state import SimConfig, SimRuntime, build_default_config, seed_all
-# Event-Pipeline (pygame/Headless)
+# Event pipeline (pygame/Headless)
 from .event_source import EventSource
-# Modus-/Pausenlogik
+# Mode/pause logic
 from .modes import ModeManager, UIRects
-# Map-Service (Hintergrundkarte)
+# Map service (background track)
 from .map_service import MapService
-# Loop (Hauptschleife) + UI-Kontext
+# Main loop + UI context
 from .loop import run_loop, UICtx
 from .spawn_utils import spawn_from_map
 from .screen_service import get_or_create_screen
@@ -67,15 +78,23 @@ if not logging.getLogger().handlers:
     )
 log = logging.getLogger("crazycar.sim")
 
+# Performance Monitoring
+LOG_THRESHOLD_SECONDS = 20  # Warning threshold for loop duration
+
 
 def _finalize_exit(hard_kill: bool) -> None:
+    """Central exit helper for graceful/forceful process termination.
+    
+    Ensures pygame cleanup and controlled process exit. Choice between
+    hard exit (sys.exit, not catchable) or soft exit (SystemExit, catchable).
+    
+    Args:
+        hard_kill: If True, use sys.exit(0) (hard); if False, raise SystemExit(0) (soft)
+        
+    Note:
+        Calls pygame.quit() and terminates process via sys.exit() or SystemExit.
     """
-    Zentraler Exit-Helfer:
-    - pygame.quit()
-    - Entweder sys.exit(0) (standard; nicht abfangbar) ODER SystemExit(0) (weich, abfangbar).
-    Steuerung über cfg.hard_exit.
-    """
-    log.info("Harter Exit → pygame.quit() + %s",
+    log.info("Exit → pygame.quit() + %s",
              "sys.exit(0)" if hard_kill else "SystemExit(0)")
     try:
         pygame.quit()
@@ -89,23 +108,60 @@ def _finalize_exit(hard_kill: bool) -> None:
 # screen creation helper moved to screen_service.get_or_create_screen
 
 
+# UI Layout Constants
+UI_TEXT_BOX_WIDTH = 200  # Width of text input box
+UI_TEXT_BOX_HEIGHT = 30  # Height of text input box
+UI_SNAPSHOT_BUTTON_WIDTH = 100  # Width of snapshot/recover buttons
+UI_SNAPSHOT_BUTTON_HEIGHT = 30  # Height of snapshot/recover buttons
+UI_SNAPSHOT_BUTTON_OFFSET = 40  # Vertical offset between snapshot buttons
+UI_COLLISION_TOGGLE_X_FACTOR = 1.2  # X position multiplier for collision toggle
+UI_COLLISION_TOGGLE_Y_OFFSET = 5  # Vertical spacing between toggles
+UI_REGELUNG_BUTTON_X = 1700  # X position for control mode buttons
+UI_REGELUNG_BUTTON_Y = 530  # Y position for control mode buttons
+UI_REGELUNG_BUTTON_SPACING = 30  # Vertical spacing between control buttons
+UI_DIALOG_WIDTH = 500  # Dialog box width
+UI_DIALOG_HEIGHT = 200  # Dialog box height
+UI_DIALOG_BUTTON_WIDTH = 100  # Dialog button width
+UI_DIALOG_BUTTON_HEIGHT = 30  # Dialog button height
+UI_DIALOG_BUTTON_PADDING = 30  # Padding around dialog buttons
+UI_DIALOG_BUTTON_X_OFFSET = 100  # X offset for first dialog button
+UI_DIALOG_BUTTON_SPACING = 100  # Spacing between dialog buttons
+
+
 def run_simulation(genomes, config):
-    """
-    NEAT-Callback: führt EINEN Simulationslauf aus.
-    Verantwortlichkeiten hier:
-      - Config/Runtime initialisieren (inkl. Seeds für Reproduzierbarkeit)
-      - Pygame/Window lazy erzeugen
-      - UI-Elemente/Rects/Toggles definieren
-      - Services/Manager instanziieren (EventSource, ModeManager, MapService)
-      - Cars spawnen, Netze erzeugen
-      - an loop.run_loop(...) delegieren
+    """NEAT callback - Execute one simulation run.
+    
+    This is the main entry point called by NEAT optimizer for each generation.
+    Initializes all systems, spawns vehicles with neural networks, and runs
+    the main game loop.
+    
+    Responsibilities:
+    1. Configuration: Build SimConfig from environment, set random seeds
+    2. Pygame Setup: Initialize pygame, create window (lazy)
+    3. UI Setup: Create fonts, buttons, toggles, dialog rects
+    4. Services: Initialize EventSource, ModeManager, MapService
+    5. Spawning: Create cars and NEAT neural networks
+    6. Loop: Delegate to run_loop() for frame-by-frame execution
+    7. Exit: Call finalize_exit() on quit
+    
+    Args:
+        genomes: List of (genome_id, genome) tuples from NEAT
+        config: NEAT config object with network parameters
+        
+    Note:
+        Initializes/reuses pygame display, seeds random generators,
+        may exit process via sys.exit() or SystemExit, writes logs.
+        
+    See Also:
+        - loop.run_loop(): Main frame loop implementation
+        - control.interface.Interface: NEAT genome → car control
     """
 
     # --- Config/Runtime ---
     cfg: SimConfig = build_default_config()
-    seed_all(cfg.seed)               # deterministische RNGs
+    seed_all(cfg.seed)               # Deterministic RNGs
     rt = SimRuntime()
-    rt.start(cfg)                    # setzt window_size, counter etc.
+    rt.start(cfg)                    # Sets window_size, counter etc.
 
     # --- Pygame init & Window (lazy) ---
     if not pygame.get_init():
@@ -117,12 +173,12 @@ def run_simulation(genomes, config):
     pygame.display.set_caption("CrazyCar Simulation")
 
     # --- UI-Setup (Fonts/Clock) ---
-    font_ft = pygame.freetype.SysFont("Arial", int(19 * f))  # FreeType für HUD-Text
+    font_ft = pygame.freetype.SysFont("Arial", int(19 * f))  # FreeType for HUD text
     font_gen = pygame.font.SysFont("Arial", 15)
     font_alive = pygame.font.SysFont("Arial", 10)
     clock = pygame.time.Clock()
 
-    # --- UI-Elemente/Buttons/Toggles (Geometrie wie im Bestand) ---
+    # --- UI elements/Buttons/Toggles (geometry as in existing code) ---
     positionx = WIDTH * 0.7 * f
     positiony = HEIGHT - 180 * f
 
@@ -167,7 +223,7 @@ def run_simulation(genomes, config):
         button_dialog_x + button_dialog_width + 100, button_dialog_y, button_dialog_width, button_dialog_height
     )
 
-    # UI-Rects-Bundle für ModeManager (kapselt Klickflächen für Dialog/Moduswahl/Snapshots)
+    # UI rects bundle for ModeManager (encapsulates click areas for dialog/mode selection/snapshots)
     ui_rects = UIRects(
         aufnahmen_button=aufnahmen_button,
         recover_button=recover_button,
@@ -177,16 +233,16 @@ def run_simulation(genomes, config):
         button_regelung2_rect=button_regelung2_rect,
     )
 
-    # Initial-Toggles (dürfen jetzt gezeichnet werden, screen existiert)
+    # Initial toggles (can now be drawn, screen exists)
     collision_button.draw(screen)
     sensor_button.draw(screen)
 
-    # Labels der Modus-Schaltflächen (Bestand)
+    # Labels of mode buttons (existing)
     text1 = "c_regelung"
     text2 = "python_regelung"
     text_color = (0, 0, 0)
 
-    # --- Map-Service (lädt „Racemap.png“, skaliert/resize, blit) ---
+    # --- Map-Service (loads "Racemap.png", scales/resize, blit) ---
     map_service = MapService(window_size, asset_name="Racemap.png")
 
     # Spawn/Car factory has been moved to sim.spawn_utils.spawn_from_map
@@ -198,20 +254,20 @@ def run_simulation(genomes, config):
         nets.append(net)
         g.fitness = 0
 
-    # --- Fahrzeuge (Bestand / Spawnpunkt) ---
-    # Verwende MapService.get_spawn() anstelle eines hardcodierten Punkts.
+    # --- Vehicles (spawn point from MapService) ---
+    # Use MapService.get_spawn() instead of hardcoded point
     try:
         cars = spawn_from_map(map_service)
         log.info("Sim-Start: cars=%d size=%sx%s (spawn from MapService) -> pos=%s", len(cars), *window_size, cars[0].position)
     except Exception:
-        # Fallback auf bisherigen harten Spawn, falls MapService fehlschlägt
+        # Fallback to previous hard spawn if MapService fails
         cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
-        log.exception("Sim-Start: MapService.get_spawn() fehlgeschlagen — benutze Fallback-Spawn.")
+        log.exception("Sim-Start: MapService.get_spawn() failed — using fallback spawn.")
 
     rt.current_generation += 1
 
     # --- Manager (Events/Modus) ---
-    es = EventSource(headless=cfg.headless)    # liefert normalisierte Events + Raw-Events (für Widgets)
+    es = EventSource(headless=cfg.headless)    # Delivers normalized events + raw events (for widgets)
     # Allow persistent override via marker file or env var so a restart can honor user's choice.
     start_python = None
     try:
@@ -235,9 +291,9 @@ def run_simulation(genomes, config):
 
     if start_python is None:
         start_python = os.getenv("CRAZYCAR_START_PYTHON", "1") == "1"
-    modes = ModeManager(start_python=start_python)     # verwaltet Pause/Dialog + PY/C-Regelung
+    modes = ModeManager(start_python=start_python)     # Manages Pause/Dialog + PY/C control
 
-    # --- UI-Kontext für den Loop (zentralisiert alles, was der Loop zum Zeichnen braucht) ---
+    # --- UI context for the loop (centralizes everything the loop needs for drawing) ---
     ui = UICtx(
         screen=screen,
         font_ft=font_ft,
@@ -262,10 +318,10 @@ def run_simulation(genomes, config):
     )
 
     # --- Hauptschleife (delegiert) ---
-    # Der Loop kümmert sich um:
+    # The loop takes care of:
     #   - Resize-Events (via EventSource.poll_resize → MapService.resize + set_mode-Refresh)
-    #   - aktive/pausierte Eingaben (Modes.apply), Snapshots/Recovery
-    #   - Zeichnen: Map, Cars, Dialog/Buttons, HUD, Toggles
+    #   - Active/paused inputs (Modes.apply), Snapshots/Recovery
+    #   - Drawing: Map, Cars, Dialog/Buttons, HUD, Toggles
     #   - Exit (QUIT/ESC) via finalize_exit
     run_loop(
         cfg=cfg,
@@ -281,34 +337,32 @@ def run_simulation(genomes, config):
         finalize_exit=_finalize_exit,
     )
 
-    # KEIN auto-quit hier: der Aufrufer darf das Fenster ggf. weiterverwenden.
+    # No auto-quit here: caller may want to reuse window
     return
 
 
 # -----------------------------------------------------------------------------
-# Direktmodus für DLL-Only (ohne NEAT)
-# Wird vom Optimizer-Adapter aufgerufen, wenn CRAZYCAR_ONLY_DLL aktiv ist
-# und er eine NEAT-freie Einstiegsmethode benötigt.
+# Direct mode for DLL-only (without NEAT)
+# Called by optimizer_adapter when CRAZYCAR_ONLY_DLL is active
+# and it needs a NEAT-free entry method.
 # -----------------------------------------------------------------------------
 def run_direct(duration_s: float | None = None) -> None:
-    """
-    Startet die Simulation ohne NEAT.
-    - Verwendet dieselbe UI-/Service-Initialisierung wie run_simulation(),
-      nur ohne genomes/config/NEAT-Netze.
-    - Standardmäßig ist die **C-Regelung (DLL)** aktiv (start_python=False).
-    - Beendet sauber per ESC/X. Optional kann die Laufzeit mit duration_s
-      begrenzt werden (sofern run_loop keine eigene Dauer unterstützt).
-
+    """Start simulation without NEAT (direct C/Python controller).
+    
+    Uses same UI/service initialization as run_simulation(), but without
+    genomes/config/NEAT networks. C controller (DLL) active by default.
+    Exits cleanly via ESC/X. Optional runtime limit with duration_s.
+    
     Args:
-        duration_s: Optionale maximale Laufzeit in Sekunden (soft).
+        duration_s: Optional maximum runtime in seconds (soft limit)
     """
     import time as _t
 
     # --- Config/Runtime ---
     cfg: SimConfig = build_default_config()
-    seed_all(cfg.seed)               # deterministische RNGs
+    seed_all(cfg.seed)               # Deterministic RNGs
     rt = SimRuntime()
-    rt.start(cfg)                    # setzt window_size, counter etc.
+    rt.start(cfg)                    # Sets window_size, counter etc.
 
     # --- Pygame init & Window (lazy) ---
     if not pygame.get_init():
@@ -370,7 +424,7 @@ def run_direct(duration_s: float | None = None) -> None:
         button_dialog_x + button_dialog_width + 100, button_dialog_y, button_dialog_width, button_dialog_height
     )
 
-    # UI-Rects-Bundle für ModeManager (kapselt Klickflächen für Dialog/Moduswahl/Snapshots)
+    # UI rects bundle for ModeManager (encapsulates click areas for dialog/mode selection/snapshots)
     ui_rects = UIRects(
         aufnahmen_button=aufnahmen_button,
         recover_button=recover_button,
@@ -380,32 +434,32 @@ def run_direct(duration_s: float | None = None) -> None:
         button_regelung2_rect=button_regelung2_rect,
     )
 
-    # Initial-Toggles (dürfen jetzt gezeichnet werden, screen existiert)
+    # Initial toggles (can now be drawn, screen exists)
     collision_button.draw(screen)
     sensor_button.draw(screen)
 
-    # Labels der Modus-Schaltflächen (wie Bestand)
+    # Labels of mode buttons (as existing)
     text1 = "c_regelung"
     text2 = "python_regelung"
     text_color = (0, 0, 0)
 
-    # --- Map-Service (lädt „Racemap.png“, skaliert/resize, blit) ---
+    # --- Map-Service (loads "Racemap.png", scales/resize, blit) ---
     map_service = MapService(window_size, asset_name="Racemap.png")
 
-    # --- Fahrzeuge (Bestand / Spawnpunkt) ---
+    # --- Vehicles (spawn point from MapService) ---
     try:
         cars = spawn_from_map(map_service)
         log.info("Direct-Run (DLL-Only): cars=%d size=%sx%s (spawn from MapService) -> pos=%s", len(cars), *window_size, cars[0].position)
     except Exception:
         cars: List[Car] = [Car([280 * f, 758 * f], 0, 20, False, [], [], 0, 0)]
-        log.exception("Direct-Run: MapService.get_spawn() fehlgeschlagen — benutze Fallback-Spawn.")
+        log.exception("Direct-Run: MapService.get_spawn() failed — using fallback spawn.")
 
-    rt.current_generation += 1  # kosmetisch für HUD/Counter
+    rt.current_generation += 1  # Cosmetic for HUD/counter
 
     # --- Manager (Events/Modus) ---
     es = EventSource(headless=cfg.headless)
 
-    # Wichtig: standardmäßig **C-Regelung** aktivieren (DLL-Logik bevorzugen)
+    # Important: Enable **C controller** by default (prefer DLL logic)
     # Allow override by marker file or env var so a restart can start in Python mode if requested.
     start_python = None
     try:
@@ -429,7 +483,7 @@ def run_direct(duration_s: float | None = None) -> None:
         start_python = os.getenv("CRAZYCAR_START_PYTHON", "0") == "1"
     modes = ModeManager(start_python=start_python)
 
-    # --- UI-Kontext für den Loop (zentralisiert alles, was der Loop zum Zeichnen braucht) ---
+    # --- UI context for the loop (centralizes everything the loop needs for drawing) ---
     ui = UICtx(
         screen=screen,
         font_ft=font_ft,
@@ -453,10 +507,10 @@ def run_direct(duration_s: float | None = None) -> None:
         button_height=button_height,
     )
 
-    # --- Hauptschleife ---
-    # Hinweis: Falls deine run_loop bereits eine "duration" unterstützt, kannst du
-    # den Parameter unten ergänzen (auskommentierte Zeile). Ansonsten sorgt
-    # duration_s nur als Soft-Grenze für einen nachgelagerten Soft-Exit.
+    # --- Main loop ---
+    # Note: If your run_loop already supports a "duration", you can
+    # add the parameter below (commented line). Otherwise,
+    # duration_s only serves as a soft limit for a downstream soft-exit.
     start_t = _t.time()
     run_loop(
         cfg=cfg,
@@ -470,15 +524,15 @@ def run_direct(duration_s: float | None = None) -> None:
         collision_button=collision_button,
         sensor_button=sensor_button,
         finalize_exit=_finalize_exit,
-        # duration=duration_s,  # nur aktivieren, falls run_loop(duration=...) existiert
+        # duration=duration_s,  # Only enable if run_loop(duration=...) exists
     )
 
-    # Fallback-Soft-Exit, wenn run_loop keine Dauer kennt:
+    # Fallback soft-exit if run_loop doesn't support duration
     if duration_s is not None and (_t.time() - start_t) >= duration_s:
         try:
             _finalize_exit(hard_kill=False)
         except SystemExit:
             pass
 
-    # KEIN auto-quit hier: der Aufrufer darf das Fenster ggf. weiterverwenden.
+    # No auto-quit here: caller may want to reuse window
     return

@@ -1,0 +1,41 @@
+name: CI Unit Tests
+
+# Führt reine Unit-Tests aus (keine Integration/E2E) bei Push/PR auf main und chore/native-upgrade-dll-v2
+
+on:
+  push:
+    branches: [ main, chore/native-upgrade-dll-v2 ]
+  pull_request:
+    branches: [ main, chore/native-upgrade-dll-v2 ]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Beschleunigt Builds durch pip-Cache basierend auf requirements.txt
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Installiert Projekt-Abhängigkeiten
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Führt nur Unit-Tests aus (Integration/E2E ausgeschlossen)
+      - name: Run unit tests only
+        run: pytest -m "not integration and not e2e"

@@ -1,13 +1,13 @@
 # crazycar/car/units.py
-"""Einheitenumrechnung zwischen Sim-Pixeln und Realwelt (cm).
+"""Unit conversion between sim pixels and real-world (cm).
 
-Annahme: Die Streckenbreite von 1900 cm entspricht WIDTH Pixeln.
+Assumption: Track width of 1900 cm corresponds to WIDTH pixels.
 """
 
 from __future__ import annotations
 from .constants import WIDTH
 
-_TRACK_WIDTH_CM: float = 1900.0  # Referenzbreite in cm
+_TRACK_WIDTH_CM: float = 1900.0  # Reference track width in cm
 
 
 def sim_to_real(simpx: float) -> float:

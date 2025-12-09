@@ -1,5 +1,5 @@
 # crazycar/car/state.py
-"""Zustandsträger für das Fahrzeug (pygame-frei). Keine Logik, nur Daten."""
+"""Vehicle State Container - Data-only (no pygame dependencies, no logic)."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -10,16 +10,33 @@ Radar = Tuple[Point, int]
 
 @dataclass
 class CarState:
-    # Grundzustand
+    """Vehicle state snapshot containing position, motion, and sensor data.
+    
+    Pure data container with no pygame dependencies or business logic.
+    Used for serialization, state recovery, and physics calculations.
+    
+    Attributes:
+        position: [x, y] coordinates in simulation pixels
+        carangle: Heading angle in degrees (0° = right/east)
+        speed: Current velocity in pixels per timestep
+        power: Throttle setting [-max, +max]
+        radangle: Steering angle in degrees
+        time: Elapsed simulation time in seconds
+        distance: Total distance traveled in pixels
+        center: Geometric center point [x, y]
+        corners: Four corner points [(x,y), ...] for collision detection
+        left_rad/center_rad/right_rad: Radar sensor endpoints and distances
+    """
+    # Core state
     position: List[float]           # [x, y]
-    carangle: float                 # ° (0 rechts)
+    carangle: float                 # ° (0 = right)
     speed: float                    # px/step
     power: float                    # throttle [-max, +max]
-    radangle: float                 # ° Lenkung
+    radangle: float                 # ° steering angle
     time: float                     # s
     distance: float                 # px
 
-    # Abgeleitet / Hilfswerte
+    # Derived / helper values
     center: List[float] = field(default_factory=lambda: [0.0, 0.0])
     corners: List[Point] = field(default_factory=list)
     left_rad: Point | None = None
@@ -31,7 +48,7 @@ class CarState:
     round_time: float = 0.0
     regelung_enable: bool = True
 
-    # Sensorik
+    # Sensors
     radar_angle: int = 60
     radars: List[Radar] = field(default_factory=list)
     radar_dist: List[int] = field(default_factory=list)

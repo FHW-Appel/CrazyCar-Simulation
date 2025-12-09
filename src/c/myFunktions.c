@@ -1,56 +1,75 @@
+/**
+ * @file myFunktions.c
+ * @brief Controller logic implementation and sensor linearization
+ * 
+ * STUDENTS: Main customization areas:
+ * 1. Linearization parameters (LINEAR_A, LINEAR_B, ADC_MIN_CLAMP, ADC_MAX_CLAMP)
+ * 2. P-controller gains in lo() and mo() functions (Kpz, Kpn)
+ * 3. Driving logic in fahren1() function
+ * 4. Collision avoidance thresholds and behavior
+ * 
+ * Do NOT change:
+ * - Function signatures (API compatibility)
+ * - Global variable names/types
+ * - API calls fahr() and servo()
+ */
 #include <stdint.h>
 #include <stdlib.h>
-#include "cc-lib.h"        // fahr(), servo(), getFahr() + (ggf. externs)
-#include "myFunktions.h"   // Prototypen
+#include "cc-lib.h"        /* fahr(), servo(), getFahr() + (possibly externs) */
+#include "myFunktions.h"   /* Function prototypes */
 
-/* ==== Globale Zustände (Definition in sim_globals.c) ====
- * Diese Variablen werden im Simulationslauf von den Linearisierungs-Wrappern
- * gesetzt und von der Fahrlogik genutzt. Bitte Namen/Typen nicht ändern.
+/* ==== Global state (definition in sim_globals.c) ====
+ * These variables are set by linearization wrappers during simulation
+ * and used by driving logic. Do NOT change names/types.
  */
-extern uint16_t abstandvorne;
-extern uint16_t abstandlinks;
-extern uint16_t abstandrechts;
+extern uint16_t abstandvorne;   /* Front distance sensor (cm) */
+extern uint16_t abstandlinks;   /* Left distance sensor (cm) */
+extern uint16_t abstandrechts;  /* Right distance sensor (cm) */
 
-/* ===== Konstante Parameter für die Linearisierung =====
- * STUDIERENDE: HIER dürft ihr für eure Linearisierung ansetzen!
- * - LINEAR_A / LINEAR_B: Kennlinienparameter eurer Umrechnung (Beispielformel).
- * - ADC_MIN_CLAMP / ADC_MAX_CLAMP: Eingangsbegrenzungen gegen Ausreißer.
- * - COS_0_DEG: Skalierung für „cos(0°) * 100“ (Konvention: 100 == 1.0).
+/* ===== Constant parameters for linearization =====
+ * STUDENTS: CUSTOMIZE these for your linearization!
+ * - LINEAR_A / LINEAR_B: Characteristic curve parameters for your conversion formula
+ * - ADC_MIN_CLAMP / ADC_MAX_CLAMP: Input limits to reject outliers
+ * - COS_0_DEG: Scaling for "cos(0°) * 100" (convention: 100 == 1.0)
  */
-#define LINEAR_A         23962u
-#define LINEAR_B         20u
-#define ADC_MIN_CLAMP    163u
-#define ADC_MAX_CLAMP    770u
-#define COS_0_DEG        100u     /* cos(0°) * 100 */
+#define LINEAR_A         23962u  /* Linearization coefficient A */
+#define LINEAR_B         20u     /* Linearization coefficient B */
+#define ADC_MIN_CLAMP    163u    /* Minimum ADC value (outlier protection) */
+#define ADC_MAX_CLAMP    770u    /* Maximum ADC value (outlier protection) */
+#define COS_0_DEG        100u    /* cos(0°) * 100 (100 == 1.0) */
 
 /* =========================================================================
- *  ZENTRALE LINEARISIERUNG
- *  STUDIERENDE: HIER ist der Haupt-Ort für eure Änderungen.
- *  Ziel: Messwert (ADC) → Abstand in cm. Der Winkel-Faktor cosAlpha ist
- *       skaliert (100 ≙ 1.0). Division durch 0 wird vermieden.
+ *  CENTRAL LINEARIZATION FUNCTION
+ *  STUDENTS: THIS is the main place for your modifications.
+ *  Goal: Convert ADC measurement to distance in cm. Angle factor cosAlpha is
+ *        scaled (100 ≙ 1.0). Division by 0 is prevented.
  *
- *  Beispiel-Formel:
- *    abstand_cm = (LINEAR_A / (messwert + LINEAR_B)) / (cosAlpha/100)
+ *  Example formula:
+ *    distance_cm = (LINEAR_A / (messwert + LINEAR_B)) / (cosAlpha/100)
  *
- *  WICHTIG:
- *  - Behaltet die Funktionssignatur bei (API!).
- *  - Achtet auf ganzzahlige Divisionen (uint32_t verwenden).
+ *  IMPORTANT:
+ *  - Keep the function signature (API compatibility).
+ *  - Use integer arithmetic carefully (uint32_t for intermediate values).
  * ========================================================================= */
 uint16_t linearisierungAD(uint16_t messwert, uint8_t cosAlpha){
+    /* Clamp input to valid range (outlier protection) */
     if (messwert < ADC_MIN_CLAMP) messwert = ADC_MIN_CLAMP;
     if (messwert > ADC_MAX_CLAMP) messwert = ADC_MAX_CLAMP;
 
+    /* Calculate distance in cm using characteristic curve */
     uint32_t cm = LINEAR_A / (uint32_t)(messwert + LINEAR_B);
 
-    if (cosAlpha == 0) cosAlpha = 1;  /* /0 vermeiden */
+    /* Avoid division by zero */
+    if (cosAlpha == 0) cosAlpha = 1;
+    /* Apply angle compensation */
     cm = (cm * 100u) / (uint32_t)cosAlpha;
 
     return (uint16_t)cm;
 }
 
-/* ========= Alte API-Wrapper =========
- * Diese Wrapper aktualisieren die globalen Abstände und geben sie zurück.
- * Bitte Signaturen unverändert lassen (werden von Python aufgerufen).
+/* ========= Legacy API wrappers =========
+ * These wrappers update global distance variables and return them.
+ * Do NOT change signatures (called from Python).
  */
 uint16_t linearisierungVorne(uint16_t analogwert){
     abstandvorne = linearisierungAD(analogwert, (uint8_t)COS_0_DEG);
@@ -65,17 +84,17 @@ uint16_t linearisierungRechts(uint16_t analogwert, uint8_t cosAlpha){
     return abstandrechts;
 }
 
-/* ========= Benötigte Regler-Helfer (wie in Beispiel) =========
- * STUDIERENDE: Falls ihr eure Seiten-/Mittelführung beeinflussen wollt,
- *              dürft ihr hier die einfachen P-Regler-Gewinne (Kpz/Kpn)
- *              vorsichtig anpassen. Signaturen bitte beibehalten.
+/* ========= Required controller helpers (as in example) =========
+ * STUDENTS: If you want to influence your lateral/center guidance,
+ *          you can carefully adjust the simple P-controller gains (Kpz/Kpn).
+ *          Keep signatures unchanged.
  */
 int16_t lo(uint16_t w){
-    int16_t e; // Regelabweichung
-    int16_t u; // Stellgröße
-    int16_t y; // Regelgröße
-    const uint8_t Kpz = 3;   /* <- STUDIERENDE: hier Gain (vorsichtig) ändern */
-    const uint8_t Kpn = 8;   /* <- STUDIERENDE: hier Teiler (vorsichtig) ändern */
+    int16_t e; /* Control error */
+    int16_t u; /* Control output */
+    int16_t y; /* Process variable */
+    const uint8_t Kpz = 3;   /* <- STUDENTS: adjust gain carefully */
+    const uint8_t Kpn = 8;   /* <- STUDENTS: adjust divisor carefully */
 
     y = (int16_t)abstandlinks;
     e = (int16_t)w - y;
@@ -84,11 +103,11 @@ int16_t lo(uint16_t w){
 }
 
 int16_t mo(uint16_t w){
-    int16_t e; // Regelabweichung
-    int16_t u; // Stellgröße
-    int16_t y; // Regelgröße
-    const uint8_t Kpz = 3;   /* <- STUDIERENDE: hier Gain (vorsichtig) ändern */
-    const uint8_t Kpn = 8;   /* <- STUDIERENDE: hier Teiler (vorsichtig) ändern */
+    int16_t e; /* Control error */
+    int16_t u; /* Control output */
+    int16_t y; /* Process variable */
+    const uint8_t Kpz = 3;   /* <- STUDENTS: adjust gain carefully */
+    const uint8_t Kpn = 8;   /* <- STUDENTS: adjust divisor carefully */
 
     y = (int16_t)abstandlinks - (int16_t)abstandrechts;
     e = (int16_t)w - y;
@@ -96,44 +115,44 @@ int16_t mo(uint16_t w){
     return u;
 }
 
-/* ========= Deine einfache Fahrlogik (1:1 übertragen) =========
- * STUDIERENDE: In diesem Block ist der Platz für eure „Fahrlogik“-Anpassungen.
- * - NICHT ändern: die API-Aufrufe fahr(...) (Vortrieb) und servo(...) (Lenkung)
- * - Erlaubt: die Berechnung der Stellgrößen (z. B. mo(0), lo(zielwert), Schwellwerte)
- * - Achtung Totzone: In Python gibt es standardmäßig eine Anfahr-Totzone (≈18).
- *   Deswegen fordert dieses Beispiel mindestens fahr(18), damit das Fahrzeug
- *   in der Simulation wirklich anrollt.
+/* ========= Your simple driving logic (1:1 transfer) =========
+ * STUDENTS: This block is the place for your "driving logic" customizations.
+ * - DO NOT change: the API calls fahr(...) (propulsion) and servo(...) (steering)
+ * - Allowed: calculation of control outputs (e.g. mo(0), lo(target), thresholds)
+ * - Attention deadzone: In Python there is a default startup deadzone (≈18).
+ *   Therefore this example requests at least fahr(18) so the vehicle
+ *   actually starts rolling in the simulation.
  */
 void fahren1(void){
-    /* Kleine „Wärmestart“-Phase, damit in der Demo schnell Bewegung sichtbar ist.
-     * STUDIERENDE: Ihr könnt die Dauer ändern, müsst aber nicht.
+    /* Small "warm start" phase for quick movement in demo.
+     * STUDENTS: You can change the duration, but don't have to.
      */
     /*
-     * Für Debug-Zwecke setzen wir boot_sig=0, damit die eigentliche Fahrlogik
-     * sofort ausgeführt wird und kein Warmup mit fahr(0) die ersten Iterationen
-     * die Regler-Ausgaben verdeckt. Dies ist temporär und kann später wieder
-     * auf 5 oder einen anderen Wert zurückgesetzt werden.
+     * For debugging purposes we set boot_sig=0 so the actual driving logic
+     * executes immediately and no warmup with fahr(0) masks the controller
+     * outputs in the first iterations. This is temporary and can be reset
+     * to 5 or another value later.
      */
-    static int boot_sig = 0; // mindert warmup (0 => kein Warmup)
+    static int boot_sig = 0; /* Reduce warmup (0 => no warmup) */
     if (boot_sig-- > 0){
         fahr(0);
-        servo( (boot_sig % 10) < 5 ? 10 : -10 ); // 0.5s rechts/links "wackeln"
+        servo( (boot_sig % 10) < 5 ? 10 : -10 ); /* 0.5s right/left "wiggle" */
         return;
     }
 
-    // --- ab hier eure echte Logik (Stellgrößenbildung) ---
+    /* --- From here: your real logic (control output formation) --- */
     int8_t leistung = getFahr();
 
-    /* Kollisions-/Abstandslogik:
-     * STUDIERENDE: Schwellwerte oder Lenkstrategie dürft ihr anpassen.
-     * Behaltet aber die fahr(...)/servo(...) Aufrufe bei.
+    /* Collision/distance logic:
+     * STUDENTS: You can adjust thresholds or steering strategy.
+     * Keep the fahr(...)/servo(...) calls.
      */
     /*
     * Avoidance trigger:
-    * - If any sensor sees a close obstacle (<30) trigger avoidance regardless
+    * - If any sensor sees a close obstacle (<50) trigger avoidance regardless
     *   of the current drive command. This prevents the case where getFahr()
     *   happens to be 0 and the car ignores immediate obstacles.
-    * - Additionally, if reversing (leistung < 0) and any sensor sees <40,
+    * - Additionally, if reversing (leistung < 0) and any sensor sees <50,
     *   also trigger avoidance (keep previous behavior for reverse safety).
     */
         if ( (abstandlinks  < 50) ||
@@ -143,26 +162,26 @@ void fahren1(void){
              abstandvorne < 50 || 
              abstandrechts < 50) ) )
     {
-        /* Rückwärts frei fahren & ausweichen */
+        /* Reverse freely & avoid */
         fahr(-20);
         servo(abstandlinks > abstandrechts ? 10 : -10);
     } else {
-        /* Vortrieb sicher über der Python-Totzone anfordern
-         * (Standard: 18 ≙ Anfahrgrenze). Bei Bedarf anpassen.
+        /* Request propulsion safely above Python deadzone
+         * (default: 18 ≙ startup threshold). Adjust if needed.
          */
         fahr(25);
 
-        /* Lenkung aus eurer Mittel-/Seitenführung:
-         * STUDIERENDE: Hier könnt ihr z. B. mo(0) / lo(zielwert) anderer Zielwerte
-         * verwenden oder die Regelparameter in mo/lo oben anpassen.
+        /* Steering from your center/lateral guidance:
+         * STUDENTS: Here you can use e.g. mo(0) / lo(target) with different targets
+         * or adjust controller parameters in mo/lo above.
          */
         servo(mo(0));
     }
 }
 
-/* ========= Stubs (einmalig) =========
- * Diese Funktionen sind Platzhalter für andere Plattformen/Tests.
- * Bitte Signaturen lassen; Inhalte hier sind für die Simulation ohne Relevanz.
+/* ========= Stubs (one-time) =========
+ * These functions are placeholders for other platforms/tests.
+ * Keep signatures; contents here are not relevant for simulation.
  */
 int16_t ro(void){ return 0; }
 void akkuSpannungPruefen(uint16_t x){ (void)x; }

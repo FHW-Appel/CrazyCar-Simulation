@@ -1,17 +1,65 @@
+"""Optimizer Workers - Process lifecycle management.
+
+Responsibilities:
+- Uniform child process creation (Windows-safe via 'spawn')
+- Robust cleanup with hard-kill fallback (taskkill/SIGKILL)
+- IPC helpers (Queue non-blocking reads)
+- Cross-platform process management
+
+Public API:
+- spawn_worker(
+      target: Callable,
+      args: tuple = (),
+      force_spawn: bool = True
+  ) -> mp.Process:
+      Create and start a child process
+      Uses 'spawn' context for cross-platform safety
+      
+- cleanup_worker(
+      proc: mp.Process,
+      timeout: float = 5.0,
+      force: bool = True
+  ) -> None:
+      Clean up child process gracefully
+      Hard-kill if timeout exceeded
+      
+- kill_process_hard(proc: mp.Process) -> None:
+      Force-terminate process (taskkill on Windows, SIGKILL on Unix)
+
+Helpers:
+- ctx(force_spawn: bool = True) -> mp.context.BaseContext:
+      Get multiprocessing context ('spawn' for consistency)
+      
+- make_queue(force_spawn: bool = True) -> Queue:
+      Create Queue from spawn context
+      
+- qget_nowait(q: Queue, default=None) -> Any:
+      Non-blocking queue read with default fallback
+      
+- is_running(proc: mp.Process) -> bool:
+      Check if process is still alive
+      
+- safe_join(proc: mp.Process, timeout: float) -> bool:
+      Join with timeout, returns success status
+
+Usage:
+    # Spawn worker
+    proc = spawn_worker(target_function, args=(arg1, arg2))
+    
+    # Clean up when done
+    cleanup_worker(proc, timeout=5.0, force=True)
+    
+    # Non-blocking queue read
+    status = qget_nowait(queue, default='unknown')
+
+Notes:
+- Does NOT configure logging (app responsibility)
+- Uses 'spawn' for Windows/Pygame/SDL compatibility
+- Hard-kill uses taskkill /F /T on Windows
+- Hard-kill uses SIGKILL on Unix systems
+- Ensures no orphaned child processes
+"""
 # src/crazycar/control/optimizer_workers.py
-from __future__ import annotations
-"""
-Prozess-Lifecycle für den Optimizer.
-
-Aufgaben:
-- Einheitliche Erstellung von Child-Prozessen (Windows-sicher via 'spawn')
-- Robustes Cleanup inkl. Hard-Kill-Fallback (taskkill/SIGKILL)
-- Kleine IPC-Helfer (Queue ohne Blockieren lesen)
-
-Wichtig:
-Dieses Modul konfiguriert KEINE Logger-Handler. Die Applikation (z. B. main.py)
-soll das Logging konfigurieren (Level/Formatter/Handler).
-"""
 import logging
 import os
 import platform
@@ -24,7 +72,7 @@ __all__ = [
     "spawn_worker",
     "cleanup_worker",
     "kill_process_hard",
-    # optionale Helfer (nützlich für API/Tests)
+    # Optional helpers (useful for API/tests)
     "ctx",
     "make_queue",
     "qget_nowait",
@@ -32,74 +80,74 @@ __all__ = [
     "safe_join",
 ]
 
-# Modul-Logger
+# Module logger
 log = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------------
-# Kontext & IPC-Helfer
+# Context & IPC helpers
 # -----------------------------------------------------------------------------
 def ctx(force_spawn: bool = True) -> mp.context.BaseContext:
     """
-    Liefert einen Multiprocessing-Kontext.
-    - Unter Windows ist 'spawn' Pflicht.
-    - Unter POSIX ist 'fork' Standard, aber 'spawn' ist für Pygame/GUI/SDL oftmals robuster.
-      Darum nutzen wir per Default force_spawn=True für konsistentes Verhalten.
+    Returns a multiprocessing context.
+    - On Windows, 'spawn' is required.
+    - On POSIX, 'fork' is default, but 'spawn' is often more robust for Pygame/GUI/SDL.
+      Therefore we use force_spawn=True by default for consistent behavior.
     """
     if force_spawn:
         try:
             return mp.get_context("spawn")
         except ValueError:
-            # Fallback (sollte praktisch nie auftreten)
+            # Fallback (should practically never occur)
             return mp.get_context()
     return mp.get_context()
 
 
 def make_queue(force_spawn: bool = True) -> Any:
     """
-    Erstellt eine Queue aus einem passenden Kontext (standardmäßig 'spawn').
-    Rückgabe-Typ ist absichtlich 'Any', um Typkonflikte mit mp.queues zu vermeiden.
+    Creates a queue from a suitable context (default 'spawn').
+    Return type is intentionally 'Any' to avoid type conflicts with mp.queues.
     """
     q = ctx(force_spawn).Queue()
-    log.debug("IPC-Queue erstellt (spawn=%s)", force_spawn)
+    log.debug("IPC queue created (spawn=%s)", force_spawn)
     return q
 
 
 def qget_nowait(q) -> Any | None:
     """
-    Nicht-blockierendes Lesen aus einer Queue.
-    Gibt None zurück, wenn die Queue leer ist oder ein Fehler auftritt.
+    Non-blocking read from a queue.
+    Returns None if queue is empty or error occurs.
     """
     try:
         return q.get_nowait()
     except _queue.Empty:
         return None
     except Exception as e:
-        log.debug("Queue nowait read ignorierter Fehler: %r", e)
+        log.debug("Queue nowait read ignored error: %r", e)
         return None
 
 
 def is_running(p: Optional[mp.Process]) -> bool:
-    """True, wenn der Prozess existiert und noch lebt."""
+    """True if the process exists and is still alive."""
     return bool(p and p.is_alive())
 
 
 def safe_join(p: Optional[mp.Process], timeout: float | None = None) -> None:
     """
-    Join mit Logging; wirft keine Exceptions weiter.
-    Verhindert, dass Aufräum-Routinen selbst hängen bleiben.
+    Join with logging; doesn't propagate exceptions.
+    Prevents cleanup routines from hanging.
     """
     if p is None:
         return
     try:
-        log.debug("Join auf Prozess pid=%s timeout=%s", getattr(p, "pid", None), timeout)
+        log.debug("Join on process pid=%s timeout=%s", getattr(p, "pid", None), timeout)
         p.join(timeout=timeout)
     except Exception as e:
-        log.warning("Join fehlgeschlagen (pid=%s): %r", getattr(p, "pid", None), e)
+        log.warning("Join failed (pid=%s): %r", getattr(p, "pid", None), e)
 
 
 # -----------------------------------------------------------------------------
-# Prozess-Erzeugung
+# Process creation
 # -----------------------------------------------------------------------------
 def spawn_worker(
     target: Callable,
@@ -109,49 +157,49 @@ def spawn_worker(
     daemon: bool = True
 ) -> mp.Process:
     """
-    Zentrale Stelle zum Starten eines (Test-)Prozesses.
-    Über diese Naht kann pytest/mocking den Start leicht patchen.
+    Central place for starting a (test) process.
+    Pytest/mocking can easily patch the start via this seam.
 
     Args:
-        target: Child-Entry-Point (Callable muss top-level picklable sein)
+        target: Child entry point (Callable must be top-level picklable)
         args:   Positional args
         kwargs: Keyword args
-        daemon: Daemon-Flag (True → beendet sich automatisch mit dem Parent)
+        daemon: Daemon flag (True → terminates automatically with parent)
 
     Returns:
-        Multiprocessing-Process (bereits gestartet).
+        Multiprocessing process (already started).
     """
     if kwargs is None:
         kwargs = {}
 
-    # Für robuste GUI/SDL/NEAT-Kombinationen nutzen wir systematisch 'spawn'
+    # For robust GUI/SDL/NEAT combinations we systematically use 'spawn'
     C = ctx(True)  # force_spawn=True
     p = C.Process(target=target, args=args, kwargs=kwargs, daemon=daemon)
 
     log.info(
-        "Starte Child-Prozess: target=%s daemon=%s start_method=spawn",
+        "Starting child process: target=%s daemon=%s start_method=spawn",
         getattr(target, "__name__", str(target)),
         daemon,
     )
     p.start()
-    log.debug("Child gestartet: pid=%s alive=%s", p.pid, p.is_alive())
+    log.debug("Child started: pid=%s alive=%s", p.pid, p.is_alive())
 
     return p
 
 
 # -----------------------------------------------------------------------------
-# Harte Terminierung (Windows/Posix)
+# Hard termination (Windows/Posix)
 # -----------------------------------------------------------------------------
 def kill_process_hard(pid: int) -> None:
     """
-    Plattformgerechtes hartes Beenden.
+    Platform-appropriate hard termination.
     - Windows: taskkill /F /PID <pid>
     - POSIX:   SIGKILL (9)
-    Fehler werden bewusst geschluckt – Cleanup soll nie hängen.
+    Errors are intentionally swallowed – cleanup should never hang.
     """
     try:
         if platform.system().lower().startswith("win"):
-            log.warning("Hard-Kill (Windows taskkill) für pid=%s", pid)
+            log.warning("Hard-Kill (Windows taskkill) for pid=%s", pid)
             subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 check=False,
@@ -159,11 +207,11 @@ def kill_process_hard(pid: int) -> None:
                 stderr=subprocess.DEVNULL,
             )
         else:
-            log.warning("Hard-Kill (POSIX SIGKILL) für pid=%s", pid)
+            log.warning("Hard-Kill (POSIX SIGKILL) for pid=%s", pid)
             os.kill(pid, 9)  # SIGKILL
     except Exception as e:
-        # Keine harten Fehler im Cleanup – nur loggen
-        log.debug("Hard-Kill ignorierter Fehler (pid=%s): %r", pid, e)
+        # No hard errors in cleanup – only log
+        log.debug("Hard-Kill ignored error (pid=%s): %r", pid, e)
 
 
 # -----------------------------------------------------------------------------
@@ -171,13 +219,13 @@ def kill_process_hard(pid: int) -> None:
 # -----------------------------------------------------------------------------
 def cleanup_worker(p: Optional[mp.Process], timeout: float = 2.0) -> None:
     """
-    Robustes Aufräumen eines Prozesses:
-        terminate() → join(timeout) → falls noch alive → harter Kill → join(timeout)
+    Robust cleanup of a process:
+        terminate() → join(timeout) → if still alive → hard kill → join(timeout)
 
-    Niemals Exceptions nach außen werfen; der Aufrufer soll hier nie hängen bleiben.
+    Never throw exceptions outward; caller should never hang here.
     """
     if p is None:
-        log.debug("cleanup_worker: kein Prozessobjekt (None) – nichts zu tun.")
+        log.debug("cleanup_worker: no process object (None) – nothing to do.")
         return
 
     try:
@@ -187,20 +235,20 @@ def cleanup_worker(p: Optional[mp.Process], timeout: float = 2.0) -> None:
             try:
                 p.terminate()
             except Exception as e:
-                log.debug("terminate() ignorierter Fehler (pid=%s): %r", pid, e)
+                log.debug("terminate() ignored error (pid=%s): %r", pid, e)
 
         safe_join(p, timeout=timeout)
 
         if is_running(p):
-            log.warning("Cleanup: Prozess lebt noch nach terminate+join → Hard-Kill pid=%s", pid)
+            log.warning("Cleanup: Process still alive after terminate+join → Hard-Kill pid=%s", pid)
             try:
                 kill_process_hard(pid)
             finally:
                 safe_join(p, timeout=timeout)
 
-        # Exitcode protokollieren (kann None sein, wenn nie gestartet)
-        log.debug("Cleanup abgeschlossen: pid=%s exitcode=%s", pid, getattr(p, "exitcode", None))
+        # Log exit code (can be None if never started)
+        log.debug("Cleanup complete: pid=%s exitcode=%s", pid, getattr(p, "exitcode", None))
 
     except Exception as e:
-        # Niemals Exceptions weiterwerfen – Cleanup soll unkritisch sein.
-        log.debug("cleanup_worker: ignorierter Fehler: %r", e)
+        # Never propagate exceptions – cleanup should be uncritical.
+        log.debug("cleanup_worker: ignored error: %r", e)

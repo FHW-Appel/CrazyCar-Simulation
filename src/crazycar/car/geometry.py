@@ -1,5 +1,5 @@
 # crazycar/car/geometry.py
-"""Fahrzeuggeometrie: Berechnung von Ecken und Radpositionen (pygame-frei)."""
+"""Vehicle Geometry - Corner and Wheel Position Calculation (pygame-free)."""
 
 from __future__ import annotations
 import math
@@ -9,19 +9,19 @@ Point = Tuple[float, float]
 
 
 def compute_corners(center: Point, carangle: float, length: float, width: float) -> List[Point]:
-    """Berechnet die vier Eckpunkte des Fahrzeugs.
+    """Compute the four corner points of the vehicle.
 
     Args:
-        center:   Mittelpunkt des Fahrzeugs (x,y)
-        carangle: Fahrzeugwinkel in Grad (0° = nach rechts)
-        length:   halbe Länge in Pixel
-        width:    halbe Breite in Pixel
+        center:   Center point of the vehicle (x,y)
+        carangle: Vehicle angle in degrees (0° = right)
+        length:   Half length in pixels
+        width:    Half width in pixels
 
     Returns:
-        [left_top, right_top, left_bottom, right_bottom] als Liste von (x,y)
+        [left_top, right_top, left_bottom, right_bottom] as list of (x,y) tuples
     """
     diag = math.sqrt(length ** 2 + width ** 2)
-    # Winkelversatz ~23°/157°/203° wie im Original
+    # Angle offset ~23°/157°/203° as in original code
     left_top = (
         center[0] + math.cos(math.radians(360 - (carangle + 23))) * diag,
         center[1] + math.sin(math.radians(360 - (carangle + 23))) * diag,
@@ -42,15 +42,15 @@ def compute_corners(center: Point, carangle: float, length: float, width: float)
 
 
 def compute_wheels(center: Point, carangle: float, diag_minus: float) -> Tuple[Point, Point]:
-    """Berechnet die Radpositionen (links/rechts vorne).
+    """Calculate wheel positions (left/right front).
 
     Args:
-        center:     Mittelpunkt des Fahrzeugs (x,y)
-        carangle:   Fahrzeugwinkel in Grad
-        diag_minus: Abstand zur Ecke minus kleiner Offset (~6px im Original)
+        center:     Vehicle center point (x,y)
+        carangle:   Vehicle angle in degrees
+        diag_minus: Distance to corner minus small offset (~6px in original)
 
     Returns:
-        (left_rad, right_rad) als (x,y)-Tupel
+        (left_rad, right_rad) as (x,y) tuple
     """
     left_rad = (
         center[0] + math.cos(math.radians(360 - (carangle + 23))) * diag_minus,
