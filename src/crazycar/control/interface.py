@@ -193,7 +193,7 @@ HEIGHT = model.HEIGHT
 
 # Optimizer can override these values (via file edit)
 k1 = 1.1
-k2 = 1.1
+k2 = 1.10000001
 k3 = 1.1
 kp1 = 1.1
 kp2 = 1.1
