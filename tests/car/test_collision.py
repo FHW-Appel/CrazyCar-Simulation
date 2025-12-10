@@ -68,9 +68,9 @@ def color_at_factory():
 # ===============================================================================
 
 def test_collision_step_returns_expected_tuple(square_corners, color_at_factory):
-    """Testbedingung: collision_step gibt Tupel mit 6 Elementen zurück.
+    """GIVEN: Smoke-Test, WHEN: collision_step, THEN: 6-Teilergebnis mit korrekten Typen.
     
-    Erwartung: (finish, collision_status, rebound_count, new_pos, lap_time, lap_callback_triggered).
+    Erwartung: (speed, angle, alive, finished, round_time, flags).
     """
     # ARRANGE
     corners = square_corners((50.0, 50.0))
@@ -94,9 +94,9 @@ def test_collision_step_returns_expected_tuple(square_corners, color_at_factory)
 
 
 def test_no_collision_returns_unchanged_state(square_corners, color_at_factory):
-    """Testbedingung: Keine Kollision → collision_status unverändert.
+    """GIVEN: Keine Kollision, WHEN: collision_step, THEN: Zustand unverändert.
     
-    Erwartung: finish=False, collision_status=0, rebound_count=0.
+    Erwartung: speed/angle unverändert, finished=False, rtime=0.0, pos_delta=(0,0), disable_control=False.
     """
     # ARRANGE
     corners = square_corners((100.0, 100.0), size=10.0)

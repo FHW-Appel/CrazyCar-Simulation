@@ -41,14 +41,6 @@ import os
 import math
 import logging
 
-"""Der Orchestrator und die eigentliche Car-Klasse. 
-    Car.update(surface, drawtracks, sensors_on, collision_mode) holt 
-    sich Sensordaten, berechnet Lenk-/Fahrdynamik, prüft Kollisionen 
-    und aktualisiert Position, Car.draw(screen) rendert Sprite, Sensoren 
-    und optional Spuren. Hilfsfunktionen wie is_alive(), get_round_time(), 
-    Geschwindigkeit(power) (vereinfachte Längsdynamik), sowie Properties für Distanz, Zeiten, 
-    aktuelle Radar-Listen und Regler-I/Os binden die oben genannten Module zusammen."""
-
 from . import constants as C
 from .constants import (
     init_pixels, f, WIDTH, HEIGHT,
@@ -464,10 +456,37 @@ class Car:
                       fwert, self.power, new_power, self.speed)
         self.power = new_power
 
-    def is_alive(self):       return self.alive
-    def get_reward(self):     return self.distance / (CAR_SIZE_X / 2)
-    def get_round_time(self): return self.round_time
-    def get_finished(self):   return self.finished
+    def is_alive(self):
+        """Check if vehicle is still active.
+        
+        Returns:
+            bool: True if vehicle is alive, False if removed
+        """
+        return self.alive
+        
+    def get_reward(self):
+        """Calculate reward metric for reinforcement learning.
+        
+        Returns:
+            float: Normalized distance traveled (distance / half car length)
+        """
+        return self.distance / (CAR_SIZE_X / 2)
+        
+    def get_round_time(self):
+        """Get lap completion time.
+        
+        Returns:
+            float: Time when finish line was crossed, 0.0 if not finished
+        """
+        return self.round_time
+        
+    def get_finished(self):
+        """Check if vehicle crossed finish line.
+        
+        Returns:
+            bool: True if finish line crossed, False otherwise
+        """
+        return self.finished
 
 
 def set_position(obj, position):

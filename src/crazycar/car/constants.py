@@ -1,11 +1,13 @@
 # crazycar/car/constants.py
+"""Vehicle and Simulation Constants.
+
+Defines fixed simulation and vehicle parameters: window dimensions (WIDTH, HEIGHT),
+global scaling factor (f), color definitions, vehicle dimensions (CAR_SIZE_X/Y),
+radar configuration, and physics limits. Pure constants for configuring other modules.
+"""
 from __future__ import annotations
 import os
 import logging
-
-"""Bündelt alle festen Simulations- und Fahrzeugparameter. 
-    Hier stehen Fenstergröße (WIDTH, HEIGHT), der globale Skalierungsfaktor f,
-    Farbdefinitionen (COLORS), Fahrzeugmaße (CAR), Sensor-Layout (SENSOR), einfache Physik-Grenzen (PHYS) sowie die Ziellinie (FINISH_LINE). Nichts “lebt” hier—es sind reine Konstanten, die die übrigen Module konfigurieren."""
 
 # ------------------------------------------------------------
 # Logging
@@ -57,9 +59,17 @@ CAR_Spurweite: float = 0.0
 
 
 def init_pixels(real_to_sim) -> None:
-    """
-    Convert real-world dimensions (cm) to pixels. Must be called exactly once
-    after importing the converter.
+    """Convert real-world dimensions (cm) to pixels.
+    
+    Must be called exactly once after importing the converter function.
+    Sets global pixel dimension variables based on real-world measurements.
+    
+    Args:
+        real_to_sim: Conversion function from real-world cm to simulation pixels
+        
+    Note:
+        Sets CAR_SIZE_X, CAR_SIZE_Y, CAR_cover_size, CAR_Radstand, CAR_Spurweite.
+        Uses fallback values if conversion fails.
     """
     global CAR_SIZE_X, CAR_SIZE_Y, CAR_cover_size, CAR_Radstand, CAR_Spurweite
 
@@ -71,7 +81,7 @@ def init_pixels(real_to_sim) -> None:
         CAR_Radstand   = float(real_to_sim(_RADSTAND_CM))
         CAR_Spurweite  = float(real_to_sim(_SPURWEITE_CM))
     except Exception as e:
-        log.error("init_pixels: Fehler beim Umrechnen (%r). Fallback to defaults.", e)
+        log.error("init_pixels: Conversion error (%r). Fallback to defaults.", e)
         # Fallback values for robust simulation (typical 32x16px sprite size)
         FALLBACK_CAR_X = 32.0
         FALLBACK_CAR_Y = 16.0

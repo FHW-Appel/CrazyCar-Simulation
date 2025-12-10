@@ -1,14 +1,20 @@
 # crazycar/car/rebound.py
+"""Collision Rebound Physics.
+
+Calculates vehicle rebound after wall collision. Reflects velocity vector
+along collision normal with damping, and pushes vehicle out of walls.
+Enables soft crash reactions (alternative to instant stop).
+
+Main Functions:
+- rebound_action(): Complete rebound calculation with wall normal detection
+- compute_rebound(): Velocity reflection with damping
+- separate_from_wall(): Push vehicle away from wall
+"""
 from __future__ import annotations
 import math
 from typing import Callable, Tuple
 import os
 import numpy as np
-
-"""Berechnet ein “Abprallen” nach Kollision. compute_rebound(vel, normal, damping) 
-    spiegelt die Geschwindigkeit an der Kollisionsnormalen und dämpft sie, separate_from_wall(center, normal, depth) 
-    schiebt das Fahrzeug minimal aus der Wand heraus. 
-    Damit lassen sich weiche Crash-Reaktionen modellieren (alternativ zu “sofort stoppen”)."""
 
 Color = Tuple[int, int, int,  int]
 

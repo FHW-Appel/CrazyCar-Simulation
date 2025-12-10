@@ -19,12 +19,26 @@ Radar = Tuple[Point, int]          # ((x, y), dist_px)
 
 
 def _listify_point(p: Point) -> List[float]:
-    """Safely output as [x, y] with float values."""
+    """Safely convert point to list with float values.
+    
+    Args:
+        p: Point as (x, y) sequence
+        
+    Returns:
+        List [x, y] with float values
+    """
     return [float(p[0]), float(p[1])]
 
 
 def _listify_radars(radars: Iterable[Radar]) -> List[List[Any]]:
-    """[ ((x,y), dist), ... ] -> [ [ [x,y], dist ], ... ] (JSON-freundlich)."""
+    """Convert radar data to JSON-friendly format.
+    
+    Args:
+        radars: Iterable of ((x,y), dist) tuples
+        
+    Returns:
+        List of [ [x,y], dist ] for JSON serialization
+    """
     out: List[List[Any]] = []
     for (pt, dist) in radars:
         out.append([_listify_point(pt), int(dist)])
@@ -48,10 +62,28 @@ def serialize_state(
     fwert: float | None = None,
     swert: float | None = None,
 ) -> Dict[str, Any]:
-    """Build JSON/pickle-compatible dict from provided values.
+    """Build JSON/pickle-compatible dict from vehicle state values.
     
-    Required fields remain unchanged, optional fields are only added if not None
-    → backward compatible.
+    Creates serializable dictionary with required and optional fields.
+    Optional fields are only added if not None for backward compatibility.
+    
+    Args:
+        position_px: Vehicle position (x, y) in pixels
+        carangle_deg: Heading angle in degrees
+        speed_px: Current speed in pixels per step
+        speed_set: Target speed setting
+        radars: Radar sensor data as ((x, y), dist) tuples
+        bit_volt_wert_list: Linearized ADC values as (bit, volt) tuples
+        distance_px: Total distance traveled in pixels
+        time_s: Elapsed simulation time in seconds
+        f_scale: Scaling factor for position (default 1.0)
+        power: Optional motor power value
+        radangle: Optional steering angle
+        fwert: Optional forward control value
+        swert: Optional steering control value
+        
+    Returns:
+        Dictionary with vehicle state suitable for JSON/pickle serialization
     """
     pos_out = (
         [float(position_px[0]) / f_scale, float(position_px[1]) / f_scale]
@@ -84,10 +116,18 @@ def serialize_state(
 
 
 def serialize_car(car: Any, *, f_scale: float = 1.0) -> Dict[str, Any]:
-    """Convenient wrapper for a Car object (expected attributes as in model).
+    """Convenient wrapper for serializing a Car object.
     
-    Uses getattr(..., None) for optional fields → if an attribute is missing,
-    it is simply not included in the result dict.
+    Extracts attributes from Car instance and delegates to serialize_state().
+    Uses getattr(..., None) for optional fields - missing attributes are
+    simply not included in the result dict.
+    
+    Args:
+        car: Car object with expected attributes (position, carangle, etc.)
+        f_scale: Scaling factor for position (default 1.0)
+        
+    Returns:
+        Dictionary with vehicle state suitable for JSON/pickle serialization
     """
     return serialize_state(
         position_px=car.position,

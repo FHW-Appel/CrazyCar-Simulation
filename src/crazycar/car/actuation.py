@@ -77,19 +77,25 @@ def apply_power(
     speed_fn: SpeedFn,
     delay_fn: DelayFn,
 ) -> Tuple[float, float]:
-    """
-    Encapsulates getmotorleistung()/ruckfahren() behavior.
+    """Apply power value to vehicle with deadzone and reverse handling.
+    
+    Encapsulates getmotorleistung()/ruckfahren() behavior with configurable
+    deadzone and minimum start percentage for static friction.
 
     Args:
-        fwert:         Requested drive power (throttle), can be negative (reverse).
-        current_power: Currently applied power value at vehicle.
-        current_speed_px: Current speed [px/step], affected by speed_fn.
-        maxpower:      Maximum allowed power (e.g., 100).
-        speed_fn:      Callback: new_speed_px = speed_fn(power). Uses internal state (e.g., radangle).
-        delay_fn:      Callback for short delays (e.g., 10 ms).
+        fwert: Requested drive power (throttle), can be negative (reverse)
+        current_power: Currently applied power value at vehicle
+        current_speed_px: Current speed in px/step, affected by speed_fn
+        maxpower: Maximum allowed power (e.g., 100)
+        speed_fn: Callback function returning new_speed_px = speed_fn(power)
+        delay_fn: Callback for short delays (e.g., 10 ms)
 
     Returns:
-        (new_power, new_speed_px)
+        Tuple of (new_power, new_speed_px) after applying power changes
+        
+    Note:
+        Deadzone configurable via CRAZYCAR_MOTOR_DEADZONE (default 18).
+        Reverse includes kickback/coast sequence if forward power was applied.
     """
     # Deadzone: configurable via CRAZYCAR_MOTOR_DEADZONE (default 18)
     if -DEADZONE < fwert < DEADZONE:

@@ -11,12 +11,26 @@ _TRACK_WIDTH_CM: float = 1900.0  # Reference track width in cm
 
 
 def sim_to_real(simpx: float) -> float:
-    """Pixel -> cm (bezogen auf 1900 cm ≙ WIDTH px)."""
+    """Convert simulation pixels to real-world centimeters.
+    
+    Args:
+        simpx: Distance in simulation pixels
+        
+    Returns:
+        Distance in centimeters (based on 1900 cm = WIDTH pixels)
+    """
     return (float(simpx) * _TRACK_WIDTH_CM) / float(WIDTH)
 
 
 def real_to_sim(realcm: float) -> float:
-    """cm -> Pixel (bezogen auf 1900 cm ≙ WIDTH px)."""
+    """Convert real-world centimeters to simulation pixels.
+    
+    Args:
+        realcm: Distance in centimeters
+        
+    Returns:
+        Distance in simulation pixels (based on 1900 cm = WIDTH pixels)
+    """
     return (float(realcm) * float(WIDTH)) / _TRACK_WIDTH_CM
 
 

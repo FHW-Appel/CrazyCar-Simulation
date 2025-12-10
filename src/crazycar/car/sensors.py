@@ -27,12 +27,20 @@ def cast_radar(
     max_len_px: float,
     border_color: Color = BORDER_COLOR,
 ) -> Tuple[Point, int]:
-    """Single radar beam in direction (carangle + degree_offset).
+    """Cast single radar beam in specified direction.
     
-    Samples pixel by pixel until border color is reached or max_len_px exceeded.
+    Samples pixel-by-pixel until border color is reached or max distance exceeded.
     
+    Args:
+        center: Start point (x, y) in pixels
+        carangle_deg: Vehicle heading angle in degrees
+        degree_offset: Angle offset from heading (e.g., -60, 0, +60)
+        color_at: Function to get pixel color at (x, y)
+        max_len_px: Maximum beam length in pixels
+        border_color: RGB(A) color indicating wall/border
+        
     Returns:
-        ((x, y), dist_px)  Endpoint & measured distance in pixels
+        Tuple of ((x, y), dist_px) - endpoint coordinates and measured distance
     """
     length = 0
     cx, cy = center
@@ -61,7 +69,23 @@ def collect_radars(
     max_len_px: float | None = None,
     border_color: Color = BORDER_COLOR,
 ) -> List[Tuple[Point, int]]:
-    """Collect radars across an angle range (e.g., -60°, 0°, +60°)."""
+    """Collect multiple radar beams across an angle range.
+    
+    Casts radars from -sweep_deg to +sweep_deg with step_deg increments.
+    For example: sweep_deg=60, step_deg=60 yields [-60°, 0°, +60°].
+    
+    Args:
+        center: Vehicle center point (x, y)
+        carangle_deg: Vehicle heading angle in degrees
+        sweep_deg: Sweep range in degrees (default: RADAR_SWEEP_DEG=60)
+        step_deg: Angular step size between beams (default: RADAR_SWEEP_DEG=60)
+        color_at: Function to get pixel color at (x, y)
+        max_len_px: Maximum beam length, defaults to WIDTH * MAX_RADAR_LEN_RATIO
+        border_color: RGB(A) color indicating wall/border
+        
+    Returns:
+        List of ((x, y), dist_px) tuples for each radar beam
+    """
     # Normalize to float (good for type checker & calls)
     limit: float = float(max_len_px) if max_len_px is not None else float(WIDTH * MAX_RADAR_LEN_RATIO)
 
@@ -74,17 +98,32 @@ def collect_radars(
 
 
 def distances(radars: Iterable[Tuple[Point, int]]) -> List[int]:
-    """Extract only the distances in pixels from the radar list."""
+    """Extract distance values from radar data.
+    
+    Args:
+        radars: Iterable of ((x, y), dist_px) tuples
+        
+    Returns:
+        List of distances in pixels
+    """
     return [int(r[1]) for r in radars]
 
 
 def linearize_DA(dist_list_cm: Iterable[float]) -> List[Tuple[int, float]]:
-    """DA linearization (Bit/Volt) according to original formulas.
+    """Convert distance measurements to digital/analog sensor values.
     
-    Formulas:
-        digital_bit = int((A / d_cm) + B)        with A=23962, B=-20
-        analog_volt = (AV / d_cm) + BV           with AV=58.5, BV=-0.05
-        For d_cm == 0 → (0, 0.0)
+    Applies DA linearization (Bit/Volt) according to original formulas:
+    - digital_bit = int((A / d_cm) + B)  with A=23962, B=-20
+    - analog_volt = (AV / d_cm) + BV     with AV=58.5, BV=-0.05
+    
+    Args:
+        dist_list_cm: Iterable of distances in centimeters
+        
+    Returns:
+        List of (digital_bit, analog_volt) tuples
+        
+    Note:
+        Returns (0, 0.0) for zero distance to avoid division by zero
     """
     A, B = 23962.0, -20.0
     AV, BV = 58.5, -0.05

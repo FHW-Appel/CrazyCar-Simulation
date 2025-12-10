@@ -24,7 +24,14 @@ _PYGAME_TICKS_PER_SEC: Final[int] = 100
 
 
 def _delay_ms_pygame(ms: int) -> None:
-    """Wait via pygame.Clock – as in original code."""
+    """Wait using pygame.Clock.
+    
+    Args:
+        ms: Milliseconds to wait
+        
+    Note:
+        Limits loop to ~100 Hz to prevent CPU burning
+    """
     clock = pygame.time.Clock()
     start = pygame.time.get_ticks()
     while pygame.time.get_ticks() - start < ms:
@@ -33,7 +40,14 @@ def _delay_ms_pygame(ms: int) -> None:
 
 
 def _delay_ms_sleep(ms: int) -> None:
-    """Fallback without pygame: simple sleep loop."""
+    """Fallback wait without pygame using time.sleep().
+    
+    Args:
+        ms: Milliseconds to wait
+        
+    Note:
+        Uses adaptive sleep loop (5ms max granularity) for efficiency
+    """
     target = time.perf_counter() + (ms / 1000.0)
     # A short sleep loop is more efficient than busy-wait
     while True:
@@ -47,8 +61,15 @@ def _delay_ms_sleep(ms: int) -> None:
 
 def delay_ms(ms: int) -> None:
     """Wait approximately ms milliseconds.
+    
+    Prefers pygame.Clock if available and initialized, otherwise
+    falls back to time.sleep() based implementation.
 
-    Uses pygame if imported *and* initialized; otherwise fallback to time.sleep().
+    Args:
+        ms: Milliseconds to wait (values <= 0 return immediately)
+        
+    Note:
+        Checks pygame initialization status before using pygame timing
     """
     if ms <= 0:
         return
