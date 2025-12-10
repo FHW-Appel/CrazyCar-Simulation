@@ -159,7 +159,7 @@ def test_init_pixels_exception_logged(caplog):
         constants.init_pixels(failing_converter)
     
     # ASSERT
-    assert any("init_pixels: Fehler beim Umrechnen" in rec.message 
+    assert any("init_pixels: Conversion error" in rec.message 
                for rec in caplog.records)
 
 
