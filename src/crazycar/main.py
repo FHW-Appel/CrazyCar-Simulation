@@ -48,7 +48,7 @@ from typing import Any, Dict
 # Simple debug switch: 0 = off, 1 = on
 # In debug mode, global log levels and verbose traces are activated.
 # Set to 1 here if you want to see debug logs by default.
-DEBUG_DEFAULT = 0
+DEBUG_DEFAULT = 1
 
 _THIS = Path(__file__).resolve()
 _SRC_DIR = _THIS.parents[1]  # .../src
