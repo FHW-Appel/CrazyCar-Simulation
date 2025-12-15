@@ -38,4 +38,4 @@ jobs:
 
       # Führt nur Unit-Tests aus (Integration/E2E ausgeschlossen)
       - name: Run unit tests only
-        run: pytest -m "not integration and not e2e"
+        run: pytest -v
