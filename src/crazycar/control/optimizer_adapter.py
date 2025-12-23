@@ -125,6 +125,9 @@ def update_parameters_in_interface(k1: float, k2: float, k3: float, kp1: float, 
     Caution: This method is fragile but deliberately retained.
     """
     path = interface_py_path()
+    
+    # Capture parameters for logging before dict comprehension scope issues
+    params = locals().copy()
 
     with open(path, encoding="utf-8", mode="r") as f:
         lines = f.readlines()
@@ -136,8 +139,8 @@ def update_parameters_in_interface(k1: float, k2: float, k3: float, kp1: float, 
             if stripped.startswith(key) and "=" in stripped:
                 parts = line.split("=")
                 indent = line[: len(line) - len(line.lstrip())]
-                # locals() contains k1..kp2 – access dynamically:
-                lines[i] = f"{indent}{parts[0].strip()} = {locals()[key]}\n"
+                # params contains k1..kp2 – access dynamically:
+                lines[i] = f"{indent}{parts[0].strip()} = {params[key]}\n"
                 replaced.add(key)
                 break
 
@@ -148,7 +151,7 @@ def update_parameters_in_interface(k1: float, k2: float, k3: float, kp1: float, 
     with open(path, encoding="utf-8", mode="w") as f:
         f.writelines(lines)
 
-    log.debug("interface.py updated: %s", {k: locals()[k] for k in _DLL_PARAMETER_KEYS})
+    log.debug("interface.py updated: %s", {k: params[k] for k in _DLL_PARAMETER_KEYS})
 
 
 # ---------------------------------------------------------------------------
