@@ -14,14 +14,25 @@ import pygame
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+# ⚠️ NOTE: Pygame-Initialisierung auch in tests/conftest.py (Session-Autouse)
+#          Diese Fixture ist DUPLICATE und DEPRECATED - wird entfernt in zukünftiger Version.
+#          Verwende tests/conftest.py::pygame_headless stattdessen.
 
 @pytest.fixture(scope="session", autouse=True)
 def pygame_init():
-    """Initialize pygame once per test session."""
-    if not pygame.get_init():
-        pygame.init()
+    """Initialize pygame once per test session.
+    
+    ⚠️ DEPRECATED: Diese Fixture ist redundant.
+    ⚠️ tests/conftest.py hat bereits pygame_headless (session, autouse).
+    ⚠️ Diese Fixture bleibt nur für Rückwärtskompatibilität und wird in Zukunft entfernt.
+    ⚠️ Migration: Verwende headless_display Fixture aus conftest.py statt pygame_init.
+    """
+    # Nicht nochmal init - bereits durch tests/conftest.py::pygame_headless
+    # if not pygame.get_init():
+    #     pygame.init()
     yield
-    pygame.quit()
+    # Nicht quit - wird durch zentrale Fixture gehandhabt
+    # pygame.quit()
 
 
 @pytest.fixture
@@ -62,11 +73,20 @@ def default_car_config():
 
 @pytest.fixture
 def integration_seed():
-    """Fixed seed for reproducible integration tests."""
+    """Fixed seed for reproducible integration tests.
+    
+    ⚠️ FIX: numpy mit try/except guarded - verhindert Suite-Crash wenn numpy fehlt.
+    """
     import random
-    import numpy as np
     
     seed = 42
     random.seed(seed)
-    np.random.seed(seed)
+    
+    # ⚠️ FIX: numpy optional - nicht alle Setups haben es installiert
+    try:
+        import numpy as np
+        np.random.seed(seed)
+    except ImportError:
+        pass  # numpy optional
+    
     return seed

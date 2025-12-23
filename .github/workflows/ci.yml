@@ -36,6 +36,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Führt nur Unit-Tests aus (Integration/E2E ausgeschlossen)
-      - name: Run unit tests only
+      # Führt Tests aus 
+      - name: tests only
         run: pytest -v

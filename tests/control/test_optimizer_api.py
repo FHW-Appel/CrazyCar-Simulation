@@ -189,8 +189,9 @@ class TestRunOptimization:
             mock_minimize.assert_called_once()
             assert result is not None
         except Exception:
-            # Bei Fehler: Prüfe zumindest dass minimize aufgerufen wurde
-            assert mock_minimize.call_count > 0 or mock_minimize.call_count == 0  # Erlaubt
+            # ⚠️ FIX: Wenn Fehler, prüfe dass minimize wirklich aufgerufen wurde
+            # (nicht immer-wahr Assertion)
+            assert mock_minimize.call_count > 0, "minimize should have been called at least once"
 
 
 # ===============================================================================

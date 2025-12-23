@@ -1,5 +1,15 @@
 """Integrationstests für Simulation Loop - Event Loop Integration.
 
+⚠️ CONSOLIDATION NOTE:
+    Diese Testdatei überschneidet sich stark mit:
+    - tests/integration/test_simulation_loop.py (HAUPTDATEI - besser strukturiert)
+    - tests/integration/test_simulation_integration.py (mehr Platzhalter)
+    
+    EMPFEHLUNG: test_simulation_loop.py als Haupt-Integrationstest verwenden.
+    Diese Datei enthält hauptsächlich Smoke-Tests und Platzhalter.
+    
+    Siehe README.md Abschnitt "Bekannte Einschränkungen" für Details.
+
 TESTBASIS (ISTQB):
 - Anforderung: Simulation Loop koordiniert alle Subsysteme
 - Module: crazycar.sim.loop
@@ -25,33 +35,71 @@ pytestmark = pytest.mark.integration
 # ===============================================================================
 
 @pytest.fixture(scope="session")
-def pygame_headless():
-    """Pygame in Headless-Mode initialisieren."""
+def pygame_headless(request):
+    """Pygame in Headless-Mode initialisieren.
+    
+    ⚠️ FIX: Verwendet pytest-internal setenv für sauberes Cleanup.
+    Vermeidet Environment-Leck (SDL_VIDEODRIVER bleibt nicht dauerhaft gesetzt).
+    """
+    # Note: session-scope fixture kann kein monkeypatch verwenden (function-scope)
+    # Daher manuelle Cleanup-Logik
+    original_value = os.environ.get('SDL_VIDEODRIVER')
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
     pygame.init()
+    
+    def cleanup():
+        pygame.quit()
+        # Restore original environment
+        if original_value is None:
+            os.environ.pop('SDL_VIDEODRIVER', None)
+        else:
+            os.environ['SDL_VIDEODRIVER'] = original_value
+    
+    request.addfinalizer(cleanup)
     yield
-    pygame.quit()
 
 
 @pytest.fixture
 def mock_sim_config():
-    """Mock SimConfig."""
+    """Mock SimConfig.
+    
+    ⚠️ FIX: Attribute ergänzt, die run_loop() tatsächlich verwendet:
+    - cfg.fps
+    - cfg.hard_exit
+    - (statt nur collision_status, max_generations, mode)
+    """
     from crazycar.sim.state import SimConfig
     config = Mock(spec=SimConfig)
+    # Original attributes (evtl. nicht verwendet)
     config.collision_status = 0
     config.max_generations = 1
     config.mode = "test"
+    # Echte run_loop() requirements
+    config.fps = 60
+    config.hard_exit = False
     return config
 
 
 @pytest.fixture
 def mock_sim_runtime():
-    """Mock SimRuntime."""
+    """Mock SimRuntime.
+    
+    ⚠️ FIX: Attribute ergänzt, die run_loop() tatsächlich verwendet:
+    - rt.window_size
+    - rt.drawtracks
+    - rt.file_text
+    - (statt nur generation, running, paused)
+    """
     from crazycar.sim.state import SimRuntime
     runtime = Mock(spec=SimRuntime)
+    # Original attributes (evtl. nicht verwendet)
     runtime.generation = 1
     runtime.running = True
     runtime.paused = False
+    # Echte run_loop() requirements
+    runtime.window_size = (800, 600)
+    runtime.drawtracks = False
+    runtime.file_text = ""
     return runtime
 
 
@@ -62,6 +110,7 @@ def mock_sim_runtime():
 class TestSimulationLoopIntegration:
     """Integrationstests für Simulation Loop."""
     
+    @pytest.mark.smoke
     def test_loop_imports_successfully(self):
         """GIVEN: Loop-Modul, WHEN: Import, THEN: Erfolgreich.
         
@@ -74,8 +123,21 @@ class TestSimulationLoopIntegration:
         except ImportError as e:
             pytest.fail(f"Loop-Import fehlgeschlagen: {e}")
     
+    @pytest.mark.skip(reason="⚠️ PLATZHALTER: Patches greifen ins Leere, run_loop() nicht aufgerufen")
     def test_loop_with_mocked_components(self, pygame_headless, mock_sim_config, mock_sim_runtime):
         """GIVEN: Gemockte Komponenten, WHEN: Loop starten, THEN: Keine Exception.
+        
+        ⚠️ PROBLEM:
+        - Patches von EventSource/ModeManager/MapService wirken nicht
+        - run_loop() nimmt Objekte direkt als Parameter (nicht über Module)
+        - Test endet mit 'assert True' ohne echte Prüfung → 0% Coverage
+        - Mock-Attribute waren nicht kompatibel (jetzt gefixt in Fixtures)
+        
+        FIX ERFORDERLICH:
+        - Mock-Objekte direkt erstellen und an run_loop() übergeben
+        - QUIT-Event oder alive=False Cars für kontrolliertes Beenden
+        - finalize_exit als Stub mit raise SystemExit
+        - Echte Assertions statt 'assert True'
         
         Erwartung: Loop koordiniert Komponenten ohne Crash.
         """
@@ -83,52 +145,11 @@ class TestSimulationLoopIntegration:
         from crazycar.sim.loop import run_loop, UICtx
         from crazycar.car.model import Car
         
-        with patch('pygame.display.get_surface') as mock_display:
-            mock_screen = Mock(spec=pygame.Surface)
-            mock_screen.get_width.return_value = 800
-            mock_screen.get_height.return_value = 600
-            mock_display.return_value = mock_screen
-            
-            # Mock EventSource
-            with patch('crazycar.sim.loop.EventSource') as mock_event_source:
-                mock_events = Mock()
-                mock_events.poll.return_value = []
-                mock_event_source.return_value = mock_events
-                
-                # Mock ModeManager
-                with patch('crazycar.sim.loop.ModeManager') as mock_mode_mgr:
-                    mock_mgr = Mock()
-                    mock_mgr.is_paused.return_value = False
-                    mock_mgr.should_exit.return_value = True  # Sofort beenden
-                    mock_mode_mgr.return_value = mock_mgr
-                    
-                    # Mock MapService
-                    with patch('crazycar.sim.loop.MapService') as mock_map:
-                        mock_map_inst = Mock()
-                        mock_map.return_value = mock_map_inst
-                        
-                        # ACT: Loop starten (endet sofort durch should_exit=True)
-                        try:
-                            # Car mit korrekter Signatur
-                            cars = [Car(
-                                position=[100.0, 200.0],
-                                carangle=0.0,
-                                power=50,
-                                speed_set=1,
-                                radars=[],
-                                bit_volt_wert_list=None,
-                                distance=0.0,
-                                time=0.0
-                            )]
-                            ui_ctx = Mock()
-                            
-                            # Würde normalerweise endlos laufen, durch should_exit=True begrenzt
-                            # run_loop(...) würde hier aufgerufen
-                            # Für Unit-Test nur Struktur prüfen
-                            assert True
-                        except Exception as e:
-                            # Erwarte keine Exception
-                            pytest.fail(f"Loop failed: {e}")
+        # TODO: Fix this test
+        # - Create mock objects directly (not via patch)
+        # - Pass mocks to run_loop() parameters
+        # - Add real assertions
+        pytest.fail("Test needs refactoring - see docstring")
     
     def test_loop_ui_context_creation(self, pygame_headless):
         """GIVEN: Pygame Screen, WHEN: UICtx erstellen, THEN: Kontext vorhanden.
@@ -174,7 +195,6 @@ class TestLoopCycleIntegration:
         # (Je nach EventSource-Implementierung)
         assert sim_events is not None
     
-    @pytest.mark.integration
     def test_loop_updates_cars(self, headless_display):
         """GIVEN: Cars in Loop, WHEN: Update, THEN: Physics/Sensors aktualisiert.
         

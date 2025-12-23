@@ -1,5 +1,15 @@
 """Integrationstests für Simulation Facade - High-Level Integration.
 
+⚠️ CONSOLIDATION NOTE:
+    Diese Testdatei überschneidet sich stark mit:
+    - tests/integration/test_simulation_loop.py (HAUPTDATEI - besser strukturiert)
+    - tests/integration/test_loop_integration.py (mehr Smoke-Tests)
+    
+    EMPFEHLUNG: test_simulation_loop.py als Haupt-Integrationstest verwenden.
+    Diese Datei enthält hauptsächlich Platzhalter-Tests (assert True, auskommentierte Calls).
+    
+    Siehe README.md Abschnitt "Bekannte Einschränkungen" für Details.
+
 TESTBASIS (ISTQB):
 - Anforderung: Vollständige Simulation mit allen Komponenten
 - Module: crazycar.sim.simulation
@@ -23,15 +33,8 @@ pytestmark = pytest.mark.integration
 # ===============================================================================
 # FIXTURES
 # ===============================================================================
-
-@pytest.fixture(scope="session")
-def pygame_headless_session():
-    """Pygame Headless-Init für Session."""
-    os.environ['SDL_VIDEODRIVER'] = 'dummy'
-    pygame.init()
-    yield
-    pygame.quit()
-
+# ⚠️ NOTE: pygame_headless_session entfernt - verwende zentrale pygame_headless
+#          aus tests/conftest.py (session-autouse)
 
 @pytest.fixture
 def mock_neat_config():
@@ -75,7 +78,8 @@ class TestSimulationEntryPoints:
             pytest.fail(f"Import fehlgeschlagen: {e}")
     
     @pytest.mark.skip("run_simulation requires full pygame+NEAT stack")
-    def test_simulation_with_mocked_neat(self, pygame_headless_session, mock_neat_config):
+    @pytest.mark.skip(reason="⚠️ EXPERIMENTAL: Needs real NEAT config/genome")
+    def test_simulation_with_mocked_neat(self, headless_display, mock_neat_config):
         """GIVEN: Mock NEAT Config, WHEN: run_simulation(), THEN: Simulation läuft.
         
         TESTBASIS:
@@ -128,7 +132,7 @@ class TestSimulationEntryPoints:
 class TestSimulationComponentIntegration:
     """Tests für Integration aller Sim-Komponenten."""
     
-    def test_simulation_initializes_all_services(self, pygame_headless_session):
+    def test_simulation_initializes_all_services(self, headless_display):
         """GIVEN: Simulation-Start, WHEN: Init, THEN: Alle Services erstellt.
         
         Erwartung: MapService, EventSource, ModeManager initialisiert.
@@ -144,19 +148,21 @@ class TestSimulationComponentIntegration:
                     try:
                         from crazycar.sim.simulation import run_direct
                         
+                        # ⚠️ PROBLEM: run_direct() nicht aufgerufen (auskommentiert)
+                        # Test endet mit assert True ohne echte Prüfung
+                        # → 0% Coverage-Beitrag
+                        
                         # ACT: Direct mode ohne NEAT
                         with patch('crazycar.sim.simulation.run_loop') as mock_loop:
                             with patch('crazycar.sim.simulation.get_or_create_screen'):
                                 mock_loop.return_value = None
                                 
-                                # run_direct() würde hier aufgerufen
-                                # Services sollten initialisiert werden
+                                # TODO: run_direct() aufrufen und echten Zustand prüfen
+                                # z.B.: run_direct(duration_s=0.1)
+                                # Danach: mock_map.assert_called(), mock_events.assert_called()
                                 
-                                # THEN: Mocks wurden aufgerufen
-                                # mock_map.assert_called()
-                                # mock_events.assert_called()
-                                # mock_mode.assert_called()
-                                assert True
+                                # ⚠️ PLATZHALTER: Sollte echten Test enthalten
+                                pytest.skip("⚠️ PLATZHALTER: run_direct() nicht aufgerufen, keine echte Prüfung")
                     except ImportError:
                         pytest.skip("Simulation nicht verfügbar")
     

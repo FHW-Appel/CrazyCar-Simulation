@@ -265,3 +265,286 @@ class TestMainIntegration:
             assert True
         except ImportError as e:
             pytest.fail(f"Dependency fehlt: {e}")
+
+
+# ===============================================================================
+# TESTGRUPPE 4: main() Function Complete Tests
+# ===============================================================================
+
+class TestMainFunctionComplete:
+    """Vollständige Tests für main() function."""
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_success_complete_flow(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: Alle Komponenten OK, WHEN: main(), THEN: Success Flow.
+        
+        TESTBASIS:
+            Function main() - Complete Success Path
+        
+        TESTVERFAHREN:
+            Integration: Build → Guard → Optimizer → Result
+        
+        Erwartung: Return 0, alle Funktionen aufgerufen.
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.return_value = {
+            'success': True,
+            'k1': 1.0, 'k2': 2.0, 'k3': 3.0,
+            'kp1': 4.0, 'kp2': 5.0,
+            'optimal_lap_time': 10.5
+        }
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 0
+        mock_build.assert_called_once()
+        mock_guard.assert_called_once()
+        mock_opt.assert_called_once()
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_optimization_invalid_result(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: Optimizer returns invalid, WHEN: main(), THEN: Error code.
+        
+        TESTBASIS:
+            Function main() - Invalid Result Handling
+        
+        TESTVERFAHREN:
+            Negative: None return
+        
+        Erwartung: Return 1.
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.return_value = None
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 1
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_user_abort(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: User abort, WHEN: main(), THEN: Clean exit 0.
+        
+        TESTBASIS:
+            Function main() - User Abort
+        
+        TESTVERFAHREN:
+            success=False Path
+        
+        Erwartung: Return 0 (nicht error).
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.return_value = {
+            'success': False,
+            'message': 'Aborted'
+        }
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 0
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_keyboard_interrupt_handling(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: Ctrl+C, WHEN: main(), THEN: Exit 130.
+        
+        TESTBASIS:
+            Function main() - KeyboardInterrupt
+        
+        TESTVERFAHREN:
+            Exception: KeyboardInterrupt
+        
+        Erwartung: Return 130.
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.side_effect = KeyboardInterrupt()
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 130
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_system_exit_handling(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: SystemExit raised, WHEN: main(), THEN: Return code.
+        
+        TESTBASIS:
+            Function main() - SystemExit
+        
+        TESTVERFAHREN:
+            Exception: SystemExit with code
+        
+        Erwartung: Return exit code.
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.side_effect = SystemExit(5)
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 5
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_runtime_error(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: RuntimeError, WHEN: main(), THEN: Error code 1.
+        
+        TESTBASIS:
+            Function main() - RuntimeError
+        
+        TESTVERFAHREN:
+            Exception: Generic exception
+        
+        Erwartung: Return 1.
+        """
+        # ARRANGE
+        mock_build.return_value = (0, "/fake/build")
+        mock_opt.side_effect = RuntimeError("Test")
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 1
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_build_failed_continues(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: Build failed, WHEN: main(), THEN: Optimizer runs anyway.
+        
+        TESTBASIS:
+            Function main() - Build Failure Recovery
+        
+        TESTVERFAHREN:
+            Error Recovery
+        
+        Erwartung: Optimizer läuft trotz Build-Fehler.
+        """
+        # ARRANGE
+        mock_build.return_value = (1, None)
+        mock_opt.return_value = {
+            'success': True,
+            'k1': 1.0, 'k2': 2.0, 'k3': 3.0,
+            'kp1': 4.0, 'kp2': 5.0,
+            'optimal_lap_time': 10.5
+        }
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 0
+        mock_opt.assert_called_once()
+    
+    @patch('crazycar.main.run_build_native')
+    @patch('crazycar.control.optimizer_api.run_optimization')
+    @patch('crazycar.main._install_pygame_quit_guard')
+    def test_main_build_exception_continues(self, mock_guard, mock_opt, mock_build):
+        """GIVEN: Build Exception, WHEN: main(), THEN: Optimizer runs.
+        
+        TESTBASIS:
+            Function main() - Build Exception Recovery
+        
+        TESTVERFAHREN:
+            Exception Recovery
+        
+        Erwartung: Optimizer läuft trotz Exception.
+        """
+        # ARRANGE
+        mock_build.side_effect = Exception("Build error")
+        mock_opt.return_value = {
+            'success': True,
+            'k1': 1.0, 'k2': 2.0, 'k3': 3.0,
+            'kp1': 4.0, 'kp2': 5.0,
+            'optimal_lap_time': 10.5
+        }
+        
+        from crazycar.main import main
+        
+        # ACT
+        result = main()
+        
+        # THEN
+        assert result == 0
+        mock_opt.assert_called_once()
+
+
+# ===============================================================================
+# TESTGRUPPE 5: _print_result() Tests
+# ===============================================================================
+
+class TestPrintResult:
+    """Tests für _print_result() helper."""
+    
+    def test_print_result_all_keys(self, caplog):
+        """GIVEN: Result dict, WHEN: _print_result, THEN: Alle Keys geloggt.
+        
+        TESTBASIS:
+            Function _print_result() - Logging
+        
+        TESTVERFAHREN:
+            Functional: Check log output
+        
+        Erwartung: Alle 6 Parameter erscheinen in Logs.
+        """
+        # ARRANGE
+        from crazycar.main import _print_result
+        
+        result = {
+            'k1': 1.0,
+            'k2': 2.0,
+            'k3': 3.0,
+            'kp1': 4.0,
+            'kp2': 5.0,
+            'optimal_lap_time': 10.5
+        }
+        
+        with caplog.at_level(logging.INFO):
+            # ACT
+            _print_result(result)
+        
+        # THEN
+        log_text = caplog.text.lower()
+        assert 'k1' in log_text
+        assert 'k2' in log_text
+        assert 'k3' in log_text
+        assert 'kp1' in log_text
+        assert 'kp2' in log_text
+        assert 'lap' in log_text or 'time' in log_text
