@@ -17,6 +17,9 @@ from crazycar.car.model import Car
 from unittest.mock import Mock
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # TESTGRUPPE 1: build_car_info_lines() Normal Cases
 # ==============================================================================

@@ -18,6 +18,9 @@ import pygame
 from crazycar.sim import map_service
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # Constants Tests
 # ==============================================================================

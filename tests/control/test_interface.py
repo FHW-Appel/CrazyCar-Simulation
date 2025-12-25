@@ -60,6 +60,9 @@ import pytest
 import crazycar.control.interface as iface
 
 
+pytestmark = pytest.mark.unit
+
+
 # ============================================================================
 # Dummy Classes - Lightweight Car Stub
 # ============================================================================

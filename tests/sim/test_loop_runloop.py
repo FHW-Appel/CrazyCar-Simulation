@@ -52,6 +52,9 @@ import pygame
 import crazycar.sim.loop as loopmod
 
 
+pytestmark = [pytest.mark.integration, pytest.mark.smoke, pytest.mark.e2e]
+
+
 # ============================================================================
 # Dummy Classes - Lightweight Stubs for Heavy Dependencies
 # ============================================================================

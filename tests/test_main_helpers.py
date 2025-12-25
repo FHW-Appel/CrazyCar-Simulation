@@ -19,6 +19,9 @@ from pathlib import Path
 from crazycar import main
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # Module Constants Tests
 # ==============================================================================

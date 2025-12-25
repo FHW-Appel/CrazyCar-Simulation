@@ -14,6 +14,9 @@ import pygame
 from unittest.mock import Mock
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # TESTGRUPPE 1: UICtx Structure Tests
 # ==============================================================================

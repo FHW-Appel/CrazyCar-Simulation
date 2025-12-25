@@ -19,6 +19,9 @@ from crazycar.sim import loop
 from crazycar.car.model import Car
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # UI Layout Constants Tests
 # ==============================================================================

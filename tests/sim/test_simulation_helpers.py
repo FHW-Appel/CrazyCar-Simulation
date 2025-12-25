@@ -18,6 +18,9 @@ import pygame
 from crazycar.sim import simulation
 
 
+pytestmark = pytest.mark.unit
+
+
 # ==============================================================================
 # Constants Tests
 # ==============================================================================

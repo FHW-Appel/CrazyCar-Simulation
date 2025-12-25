@@ -139,9 +139,9 @@ def build_default_config(env: Dict[str, str] | None = None) -> SimConfig:
     """Build SimConfig from environment variables.
     
     Reads configuration from environment with sensible defaults:
-    - HEADLESS, SDL_VIDEODRIVER: Headless mode toggle
+    - CRAZYCAR_HEADLESS / HEADLESS, SDL_VIDEODRIVER: Headless mode toggle
     - CRAZYCAR_FPS: Frame rate (default 100)
-    - CRAZYCAR_SEED: Random seed (default 1234)
+    - CRAZYCAR_SEED: Random seed (default 1234) [backcompat: CAR_SIM_SEED]
     - CRAZYCAR_HARD_EXIT: Hard exit on crash (default 1)
     - CRAZYCAR_WIDTH/HEIGHT: Window dimensions
     - CRAZYCAR_ASSETS_DIR: Asset folder path
@@ -156,9 +156,10 @@ def build_default_config(env: Dict[str, str] | None = None) -> SimConfig:
         SimConfig instance with merged settings.
     """
     e = env or os.environ
-    headless = e.get("HEADLESS", "0") == "1" or e.get("SDL_VIDEODRIVER") == "dummy"
+    headless_flag = e.get("CRAZYCAR_HEADLESS", e.get("HEADLESS", "0"))
+    headless = str(headless_flag).strip().lower() not in ("0", "false", "no", "off", "") or e.get("SDL_VIDEODRIVER") == "dummy"
     fps = int(e.get("CRAZYCAR_FPS", "100"))
-    seed = int(e.get("CRAZYCAR_SEED", "1234"))
+    seed = int(e.get("CRAZYCAR_SEED", e.get("CAR_SIM_SEED", "1234")))
     hard_exit = e.get("CRAZYCAR_HARD_EXIT", "1") == "1"
 
     width = int(e.get("CRAZYCAR_WIDTH", str(DEFAULT_WIDTH)))

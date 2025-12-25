@@ -6,14 +6,15 @@ from pathlib import Path
 import pytest
 
 # -----------------------------
-# Headless-Schalter per ENV
-#   CAR_SIM_HEADLESS = 1/true  -> dummy (Default)
-#   CAR_SIM_HEADLESS = 0/false -> echtes Fenster
+# Headless-Schalter per ENV (vereinheitlicht):
+#   CRAZYCAR_HEADLESS = 1/true  -> dummy (Default)
+#   CRAZYCAR_HEADLESS = 0/false -> echtes Fenster
+#   (Backcompat) CAR_SIM_HEADLESS akzeptiert, falls gesetzt
 # -----------------------------
 def _truthy(s: str) -> bool:
     return str(s).strip().lower() not in ("0", "false", "no", "off", "")
 
-HEADLESS = _truthy(os.getenv("CAR_SIM_HEADLESS", "1"))
+HEADLESS = _truthy(os.getenv("CRAZYCAR_HEADLESS", os.getenv("CAR_SIM_HEADLESS", "1")))
 if HEADLESS:
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -171,12 +172,13 @@ def pygame_headless():
     # Note: os.environ cleanup nicht nötig - setdefault ändert nichts, wenn bereits gesetzt
 
 # -----------------------------
-# Reproduzierbarkeit: Seeds
-#   CAR_SIM_SEED=1337 (Default)
+# Reproduzierbarkeit: Seeds (vereinheitlicht)
+#   CRAZYCAR_SEED=1337 (Default)
+#   (Backcompat) CAR_SIM_SEED akzeptiert, falls gesetzt
 # -----------------------------
 @pytest.fixture(scope="session", autouse=True)
 def _seed_session():
-    seed = int(os.getenv("CAR_SIM_SEED", "1337"))
+    seed = int(os.getenv("CRAZYCAR_SEED", os.getenv("CAR_SIM_SEED", "1337")))
     random.seed(seed)
     try:
         import numpy as np

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import pytest
 
 # Ensure src on sys.path
 _ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,9 @@ if _SRC not in sys.path:
 from crazycar.sim.modes import ModeManager, UIRects
 from crazycar.sim.state import SimRuntime, SimEvent
 import pygame
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_mode_manager_switch_to_python_keeps_car_alive():

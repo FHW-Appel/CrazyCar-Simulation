@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import sys
+import pytest
 
 # Ensure src on sys.path
 _ROOT = Path(__file__).resolve().parents[1]
@@ -9,6 +10,9 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from crazycar.car.rebound import rebound_action
+
+
+pytestmark = pytest.mark.unit
 
 
 def color_at_dummy(pt):

@@ -18,6 +18,9 @@ import pygame
 import crazycar.sim.simulation as simfac
 
 
+pytestmark = [pytest.mark.integration, pytest.mark.smoke, pytest.mark.e2e]
+
+
 class _DummyToggle:
     def __init__(self, x, y, *labels):
         self.rect = pygame.Rect(x, y, 10, 10)
