@@ -2,18 +2,18 @@
 
 ## Übersicht
 
-**942 Tests gesamt** ⭐️ **80% COVERAGE ERREICHT!** 🎉
-- ~860 passed
-- ~80 skipped
-- Coverage: 80% beibehalten nach Konsolidierung
+### Stand (Kennzahlen)
 
-**Konsolidierungs-Erfolg:**
-- ❌ 1 Datei gelöscht (test_optimizer_adapter.py - 4 Tests)
-- ✅ ~43 DUPLICATE Tests aus test_optimizer_api_helpers.py entfernt
-- ✅ Klare Modul-Trennung: optimizer_api vs. optimizer_adapter
-- **Gesamt:** 942 Tests (vorher 899 + Duplikate), 80% Coverage
+Die folgenden Kennzahlen sind **Momentaufnahmen** und können je nach Plattform/Commit/Python-Version/Abhängigkeiten/Testauswahl abweichen.
 
-**Code Coverage:** 80% (4025 lines total, 806 not covered)
+- Stand: 2025-12-22 (lokaler Lauf)
+- Commit: d61d11c
+- Python: 3.13.7 (lokal)
+
+### Kurzfazit (aus dem Stand-Lauf)
+
+- Tests/Coverage: Standabhängig (siehe „Stand (Kennzahlen)“)
+- Reproduktion: siehe „Test-Ausführung“ und „Coverage & Reporting“
 
 ```
 ├── Unit Tests:        ~830 Tests (100% passed)
@@ -40,16 +40,16 @@
 **Status:** ✅ **VOLLSTÄNDIG BEREINIGT**
 
 **Durchgeführte Konsolidierung:**
-- ❌ `test_optimizer_adapter.py` - **GELÖSCHT** (enthielt nur 4 Import-Tests)
-- ✅ `test_optimizer_adapter_extended.py` - **HAUPTDATEI** (15 Tests)
-- ✅ `test_optimizer_api_helpers.py` - **BEREINIGT** (nur optimizer_api Tests, 8 Tests)
+- ✅ `tests/control/test_optimizer_api_helpers.py` - **BEREINIGT** (nur optimizer_api Tests)
   - Alle optimizer_adapter DUPLICATE Tests entfernt (Lines 329-1400 gelöscht)
   - MIXED RESPONSIBILITIES WARNING aus Docstring entfernt
 
+**Hinweis:** Dateinamen und Testanzahlen können je nach Commit variieren (siehe „Stand (Kennzahlen)“).
+
 **Ergebnis:**
-- Klare Trennung: optimizer_api (helpers) vs. optimizer_adapter (extended)
+- Klare Trennung: optimizer_api (helpers) vs. optimizer_adapter (je nach Commit-Stand)
 - ~43 Tests entfernt (Duplikate)
-- 942 Tests nach Konsolidierung (vorher 899 + überlappende Tests)
+- Kennzahlen: siehe „Stand (Kennzahlen)"
 
 #### B) ✅ Pygame-Initialisierung - KONSOLIDIERT
 **Status:** ✅ Zentrale Fixture etabliert
@@ -74,11 +74,10 @@
 ---
 
 **📊 Konsolidierungs-Zusammenfassung:**
-- ❌ test_optimizer_adapter.py gelöscht (4 Import-Tests)
-- ✅ test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt)
+- ✅ tests/control/test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt)
 - ✅ pygame-Init zentral in conftest.py
 - ✅ Integration-Tests Haupt-Dateien dokumentiert
-- **Ergebnis:** 942 Tests (von 899 + Duplikaten), 80% Coverage beibehalten
+- Ergebnis: konsolidierte Struktur; Kennzahlen siehe „Stand (Kennzahlen)“
 
 ---
 
@@ -105,7 +104,7 @@
 #### B) Tests die Exceptions durchwinken (bereits teilweise behoben)
 **Problem:** 
 
-1. **test_optimizer_adapter_extended.py** (Zeile 228):
+1. **optimizer_adapter Tests** (ehem. „extended“-Datei; Zeilennummer/Datei abhängig vom Commit):
    ```python
    assert "k1" in str(e) or "k2" in str(e) or True  # or True → immer True!
    ```
@@ -219,21 +218,17 @@ except ImportError:
 - **Ergebnis:** Klare Haupt-Datei benannt, andere als Neben-Tests dokumentiert
 
 **C) optimizer_adapter Tests - ✅ VOLLSTÄNDIG KONSOLIDIERT:**
-- ✅ `test_optimizer_adapter_extended.py` → **HAUPTDATEI** (15 Tests) ✅
-- ❌ `test_optimizer_adapter.py` → **GELÖSCHT** (nur 4 Import-Tests)
-- ✅ `test_optimizer_api_helpers.py` → **BEREINIGT** (8 Tests, nur optimizer_api)
+- ✅ `tests/control/test_optimizer_api_helpers.py` → **BEREINIGT** (nur optimizer_api)
   - Lines 329-1400 entfernt (~43 DUPLICATE Tests)
   - Docstring bereinigt (MIXED RESPONSIBILITIES entfernt)
 - **Ergebnis:** 
-  - Klare Trennung: optimizer_api (helpers) vs. optimizer_adapter (extended)
+  - Klare Trennung: optimizer_api (helpers) vs. optimizer_adapter (je nach Commit-Stand)
   - ~43 Tests entfernt (Duplikate eliminiert)
-  - 942 Tests gesamt nach Konsolidierung
 
 **Zusammenfassung Konsolidierung:**
-- ❌ 1 Datei gelöscht (test_optimizer_adapter.py)
-- ✅ 1 Datei bereinigt (~43 Tests entfernt aus test_optimizer_api_helpers.py)
+- ✅ 1 Datei bereinigt (~43 Tests entfernt aus tests/control/test_optimizer_api_helpers.py)
 - ✅ 3 Dateien als DEPRECATED/HAUPTDATEI markiert
-- ✅ 942 Tests, 80% Coverage beibehalten
+- ✅ Kennzahlen: siehe „Stand (Kennzahlen)"
 
 ---
 
@@ -300,13 +295,11 @@ except ImportError:
 |-------|-------|-----------|--------------|----------|
 | **`test_interface.py`** 🆕 | **13** | ✅ **13/13** | ✅ **Controller Integration (ISTQB)** | Vollständig |
 | **`test_optimizer_api_helpers.py`** 🆕 | **8** | ✅ **8/8** | ✅ **optimizer_api Tests (ISTQB)** | ✅ Bereinigt |
-| **`test_optimizer_adapter_extended.py`** 🆕 | **15** | ✅ **15/15** | ✅ **optimizer_adapter HAUPTDATEI** | ✅ Konsolidiert |
-| ~~`test_optimizer_adapter.py`~~ | ~~4~~ | ❌ **GELÖSCHT** | - | Import-Tests entfernt |
+| `test_optimizer_adapter.py` | (variiert) | (variiert) | (variiert) | Status abhängig vom Commit |
 
 **✅ Konsolidierung abgeschlossen:**
-- test_optimizer_adapter.py gelöscht (4 Tests)
-- test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt)
-- Klare Trennung: optimizer_api vs. optimizer_adapter Tests
+- tests/control/test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt)
+- Klare Trennung: optimizer_api vs. optimizer_adapter Tests (je nach Commit-Stand)
 
 ### Integration Tests (~69 Tests - 100%)
 
@@ -455,9 +448,8 @@ except ImportError:
 - ✅ Plain object test (no close/join_thread methods)
 
 **⚠️ Bekannte Dopplungen:**
-- Diese Tests ersetzen teilweise `test_optimizer_adapter_extended.py`
-- Beide Dateien testen dieselben Funktionen → Redundanz
-- **Empfehlung:** Extended-Datei als DUPLICATE markieren oder konsolidieren
+- Teilweise überlappende Abdeckung zwischen Control-Tests (optimizer_api/adapter) je nach Commit-Stand
+- **Empfehlung:** Dopplungen konsequent markieren oder zusammenführen
 
 ### 5. Simulation Smoke Tests 🆕
 
@@ -514,10 +506,13 @@ pytest tests/integration/test_e2e_simulation.py -v # End-to-End
 
 ### Coverage & Reporting
 ```powershell
-pytest tests/ --cov=src/crazycar --cov-report=html # Coverage Report
+pip install pytest-cov
+pytest tests/ --cov=src/crazycar --cov-report=html # Coverage Report (lokal)
 pytest tests/ -v --durations=10                     # Langsamste Tests
 pytest tests/ -v -x                                 # Stop bei erstem Fehler
 ```
+
+**Hinweis:** In CI wird aktuell `pytest -v` ausgeführt (ohne Coverage-Report). `pytest-cov` ist nicht Teil von requirements.txt.
 
 ## Fixtures (tests/integration/conftest.py)
 
@@ -617,7 +612,7 @@ pytest tests/ -v -x                                 # Stop bei erstem Fehler
 
 ### Bekannte Probleme (siehe Abschnitt oben)
 - ⚠️ test_loop_integration.py: Patches greifen ins Leere, Platzhalter-Tests
-- ⚠️ test_optimizer_adapter_extended.py: Dopplung mit test_optimizer_api_helpers.py
+  - ⚠️ mögliche Dopplungen zwischen optimizer_api-/optimizer_adapter-Tests (je nach Commit-Stand)
 - ⚠️ pygame_headless Fixture: Environment-Leck
 - ⚠️ Mehrere Import-Tests redundant über Dateien verteilt
 
@@ -642,18 +637,16 @@ pytest tests/ -v -x                                 # Stop bei erstem Fehler
 
 **Top Coverage-Gewinne (Neue Tests):**
 1. **simulation.py:** 22% → 86% (+64%!) - 5 smoke tests
-2. **optimizer_adapter.py:** 33% → 91% (+58%!) - 15 comprehensive tests (test_optimizer_adapter_extended.py)
+2. **optimizer_adapter.py:** 33% → 91% (+58%!) - Standabhängig (siehe „Stand (Kennzahlen)“)
 3. **loop.py:** 39% → 91% (+52%!) - 4 smoke tests
 4. **interface.py:** 35% → 74% (+39%!) - 13 integration tests
 5. **main.py:** 27% → 64% (+37%!) - helper tests
 
 **✅ Konsolidierungen abgeschlossen:**
-- ❌ test_optimizer_adapter.py gelöscht (4 Import-Tests)
-- ✅ test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt, nur optimizer_api)
-- ✅ test_optimizer_adapter_extended.py als HAUPTDATEI etabliert
+- ✅ tests/control/test_optimizer_api_helpers.py bereinigt (~43 DUPLICATE Tests entfernt, nur optimizer_api)
 - ✅ pygame-Init zentral in conftest.py
 - ✅ Integration-Tests Haupt-Dateien dokumentiert
-- **Ergebnis:** 942 Tests (von 899 + Duplikaten), 80% Coverage beibehalten
+- Ergebnis: konsolidierte Struktur; Kennzahlen siehe „Stand (Kennzahlen)"
 
 **⚠️ Einschränkungen & Bekannte Probleme:**
 - Siehe Abschnitt "Bekannte Einschränkungen & Verbesserungsbedarf" oben
@@ -666,9 +659,11 @@ pytest tests/ -v -x                                 # Stop bei erstem Fehler
 ---
 
 **Erstellt:** November 2025 | **Aktualisiert:** Dezember 22, 2025  
-**Framework:** pytest 8.4.2 + pytest-cov 7.0.0 + pygame 2.6.1 (headless)  
+**Framework:** pytest 8.4.2 + pygame 2.6.1 (headless)  
 **Python:** 3.13.7  
 **Tests:** 899 gesamt (899 passed + 76 skipped + 2 xfailed + 2 xpassed)  
 **Pass-Rate:** 100% (899/899 passed)  
 **Coverage:** 80% (src/crazycar) ⭐ **ZIEL ERREICHT!**  
 **Status:** ⚠️ **Mit bekannten Einschränkungen** (siehe Action Items oben)
+
+**Hinweis:** `pytest-cov` ist optional (nicht in requirements.txt) und wird bei Bedarf lokal installiert.
