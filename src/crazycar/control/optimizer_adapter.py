@@ -1,51 +1,29 @@
-"""Optimizer Adapter - Bridge between optimizer and simulation/NEAT.
+"""Optimizer Adapter - Parameter Injection + Simulation Launcher.
 
-Responsibilities:
-- Path helpers for config/interface/log files
-- Inject controller parameters into interface.py
-- Launch NEAT simulation (lazy imports for fast tests)
-- Child process entry with status communication (ESC/error/ok)
-- DLL-only mode for testing C controllers without NEAT
+This module sits between parameter-tuning code and the simulation.
 
-Public API:
-- update_parameters_in_interface(params: dict) -> None:
-      Write k1, k2, k3, kp1, kp2 into interface.py source code
-      Allows dynamic parameter updates for optimization
-      
-- run_neat_simulation(genomes_config_tuple: tuple) -> None:
-      NEAT callback entry point
-      Starts simulation with given genomes and config
-      
-- run_neat_entry(status_q, params: dict, ...) -> None:
-      Child process entry with Queue communication
-      Reports 'ok', 'aborted', or 'error' status
-      Handles ESC detection and exception reporting
+What it does:
+- Provides path helpers (interface.py, log.csv, optional NEAT config)
+- Updates tuning parameters (k1/k2/k3/kp1/kp2) by rewriting
+    `control/interface.py` (historic behavior retained)
+- Launches the simulation in a way that works well in child processes
+    (status reporting: ok/aborted/error)
 
-Path Helpers:
-- here() -> str: Control module directory
-- neat_config_path() -> str: Path to config_neat.txt
-- interface_py_path() -> str: Path to interface.py
-- log_path() -> str: Path to log.csv
+Default behavior (important):
+- The project is configured to run in "DLL-only" mode by default
+    (`DLL_ONLY_DEFAULT = 1`).
+- In DLL-only mode, NEAT is skipped entirely and a direct simulation entry
+    point is called (e.g. run_direct/run_loop/main).
+    This supports the primary use-case: testing the native student controller
+    built from the C sources.
 
-DLL-Only Mode:
-- DLL_ONLY_DEFAULT = 1 (constant)
-- When enabled, skips NEAT and runs direct simulation
-- Looks for run_direct/run_loop/run_game/main entry points
-- Useful for testing C controllers (myFunktions.c → fahren1())
-
-Usage:
-    # Update parameters
-    update_parameters_in_interface({'k1': 1.0, 'k2': 0.5, ...})
-    
-    # Run in child process
-    run_neat_entry(queue, params, time_limit, pop_size, dll_only)
+Optional behavior:
+- If DLL-only is disabled (`DLL_ONLY_DEFAULT = 0` and no overriding env var),
+    this module can run a NEAT-based evaluator using config_neat.txt.
 
 Notes:
 - Parameter keys: k1, k2, k3, kp1, kp2
-- Preserves old behavior (write to interface.py source)
-- DLL mode bypasses NEAT for faster C testing
-- Status queue enables ESC abort from child → parent
-- Lazy imports reduce startup time for tests
+- Env override: CRAZYCAR_ONLY_DLL=1/true/yes/on forces DLL-only.
 """
 # src/crazycar/control/optimizer_adapter.py
 import logging

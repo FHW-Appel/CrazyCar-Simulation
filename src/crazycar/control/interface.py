@@ -1,48 +1,31 @@
-"""Control Interface - NEAT genome to car control bridge.
+"""Control Interface - Connect Simulation Cars to Controllers (C or Python).
 
-Responsibilities:
-- Define abstract control interface for car actuation
-- Provide Python and C implementation adapters
-- Manage NEAT neural network genomes
-- Import and validate native C extension (carsim_native)
-- Handle car sensor inputs and control outputs
+This module provides the glue between the simulation loop and the controller
+implementations.
 
-Public API:
-- class ControllerInterface (ABC):
-      Abstract base for all controllers
-      feed_sensors(car: Car) -> None
-      compute() -> tuple[float, float]  # (power, steering)
-      
-- class PythonController(ControllerInterface):
-      NEAT genome-based controller
-      Uses feed-forward neural network for control decisions
-      
-- class CController(ControllerInterface):
-      Native C-based controller via CFFI
-      Calls regelungtechnik() from myFunktions.c
-      
-- class Interface:
-      Main API for creating controllers
-      spawn(car: Car, genome, config, use_python: bool) -> ControllerInterface
+Project intent:
+- Students can implement / modify the controller logic in C.
+- The project builds those C sources into a native CFFI extension
+    (`crazycar.carsim_native`) and executes the controller inside the simulator.
 
-Usage:
-    # Create Python controller with NEAT genome
-    iface = Interface()
-    controller = iface.spawn(car, genome, neat_config, use_python=True)
-    controller.feed_sensors(car)
-    power, steer = controller.compute()
-    
-    # Create C controller
-    c_controller = iface.spawn(car, None, None, use_python=False)
-    c_controller.feed_sensors(car)
-    power, steer = c_controller.compute()  # Calls C code
+Controllers provided here:
+- C controller: `Interface.regelungtechnik_c(cars)`
+    - Calls into the native extension (`lib.regelungtechnik()`)
+    - Reads outputs via `lib.getfwert()` / `lib.getswert()`
+    - Applies actuation (power/steering) to the Car instances
+- Python controller (fallback / reference): `Interface.regelungtechnik_python(cars)`
+    - Simple regulator based on radar distances
+    - Uses the tuning parameters `k1/k2/k3/kp1/kp2`
+
+Native module loading:
+- Tries to import `crazycar.carsim_native` from the build output (build/_cffi)
+    and verifies required symbols.
+- If the native module is missing or incomplete, it automatically falls back
+    to the Python controller.
 
 Notes:
-- Ensures build/_cffi on sys.path for native imports
-- Validates C extension symbols at import
-- Required symbols: regelungtechnik, getfwert, getswert, sensor getters
-- Python mode uses NEAT-Python for evolutionary learning
-- C mode tests native implementation (myFunktions.c)
+- This file intentionally keeps the historic behavior where optimizer tooling
+    can rewrite the numeric parameters in-place (k1..kp2) for tuning.
 """
 # crazycar/control/interface.py
 from __future__ import annotations

@@ -1,41 +1,38 @@
-"""CrazyCar Main Entry Point - Build, Simulate, Optimize.
+"""CrazyCar Main Entry Point - Build Native Controller + Run Simulation.
 
-This module provides the main entry point for the CrazyCar simulation:
+This module is the official entry point for the CrazyCar project.
+Its primary purpose is to build the native C controller library and then
+run the (optional) parameter-tuning / simulation workflow.
 
-Workflow:
-1. Configure logging (debug mode via DEBUG_DEFAULT constant)
-2. Build native C extension (run_build_native)
-3. Install pygame quit guard (ESC/X → clean exit)
-4. Run NEAT optimization (run_optimization)
-5. Print results
+Typical workflow:
+1. Configure logging (DEBUG_DEFAULT / CRAZYCAR_DEBUG)
+2. Build the native CFFI extension (run_build_native)
+3. Install a global Pygame quit guard (ESC/X -> clean exit)
+4. Run an optional parameter optimization (SciPy-based) that repeatedly
+     launches the simulation to evaluate controller behavior
 
-Features:
-- Debug mode: Set DEBUG_DEFAULT=1 for verbose logging
-- Quit guard: ESC or X button triggers immediate clean exit
-- Native build: Compiles C extension before simulation
-- Optimizer: NEAT-based evolutionary parameter optimization
+Important project intent:
+- The native library is built from the C sources (see build_native.py / src/c)
+    so student-provided controller code can be executed inside the simulator.
+- The simulation loop itself uses the controller via control/interface.py
+    (C controller via `carsim_native`, with a Python fallback regulator).
 
-Environment Variables:
-- CRAZYCAR_DEBUG: "1" for debug mode, "0" otherwise
-- CRAZYCAR_NATIVE_PATH: Path to built extension
-- SDL_VIDEODRIVER: Set to "dummy" for headless testing
+Environment variables:
+- CRAZYCAR_DEBUG: "1" enables debug logging
+- CRAZYCAR_NATIVE_PATH: path to the built extension added to sys.path
+- SDL_VIDEODRIVER: set to "dummy" for headless runs/tests
 
-Exit Codes:
-- 0: Success or clean abort
-- 1: Error during optimization
+Exit codes:
+- 0: success or clean abort
+- 1: unexpected error
 - 130: Ctrl+C (KeyboardInterrupt)
 
 Usage:
-    python -m crazycar.main
-    
-    # Debug mode
-    DEBUG_DEFAULT = 1
-    python -m crazycar.main
+        python -m crazycar.main
 
 Notes:
-- Pygame quit guard patches pygame.event.get/poll
-- Ensures X button and ESC work from any code location
-- Native build artifacts in build/_cffi/crazycar/
+- The quit guard patches pygame.event.get/poll so ESC and the window close
+    button work reliably even in deep loops.
 """
 # src/crazycar/main.py
 from __future__ import annotations

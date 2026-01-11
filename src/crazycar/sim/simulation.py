@@ -1,45 +1,27 @@
-"""Simulation Facade - High-Level Entry Point.
+"""Simulation Facade - High-Level Simulation Entry Points.
 
-This module provides the main entry point for simulation runs, typically
-called by NEAT optimizer for each generation.
+This module bootstraps a full simulation run:
+- config/runtime initialization
+- pygame window (or headless surface)
+- UI widgets (buttons, dialogs, toggles)
+- services (MapService, EventSource, ModeManager)
+- car spawning
+- delegation into the main frame loop (event -> update -> draw)
 
-Main Functions:
-- run_simulation(): Start a simulation run with NEAT genomes
-- run_direct(): Start a simulation run without NEAT (direct mode)
+Main entry points:
+- `run_direct(...)`:
+    Runs the simulation without any evolutionary/ML machinery.
+    This is the typical workflow for running/testing the student C controller
+    (via `control/interface.py`) and the Python fallback regulator.
 
-Responsibilities:
-1. Configuration: Initialize SimConfig, SimRuntime from environment
-2. Pygame Setup: Create display window (lazy, reusable)
-3. UI Setup: Create buttons, dialogs, toggle widgets
-4. Service Initialization: MapService, EventSource, ModeManager
-5. Vehicle Spawning: Create cars at start position
-6. NEAT Integration: Connect genomes to neural network controllers
-7. Loop Delegation: Call run_loop() for main game loop
-8. Exit Handling: Cleanup and process termination
+- `run_simulation(genomes, config)`:
+    Optional NEAT evaluator entry point (kept for historical experiments).
+    It can be used if the project is configured to run an evolutionary search,
+    but it is not the default path when DLL-only/direct mode is enabled.
 
-Helper Functions:
-- _finalize_exit(): Guaranteed/soft process exit
-- _get_or_create_screen(): Reuse/create pygame window
-
-Constants:
-- LOG_THRESHOLD_SECONDS: 20 (warning threshold for long loops)
-
-Dependencies:
-- state: SimConfig, SimRuntime, build_default_config, seed_all
-- event_source: EventSource (normalized events, headless-capable)
-- modes: ModeManager, UIRects (pause/mode logic, dialog control)
-- map_service: MapService (map loading/resize/blit)
-- loop: run_loop, UICtx (central frame loop + UI context)
-- toggle_button: ToggleButton (UI widget)
-
-Testing:
-- Unit: ModeManager, EventSource parsing, MapService resize
-- Integration: run_loop with SDL_VIDEODRIVER=dummy (headless), fixed seeds
-- E2E/Smoke: Short simulation runs, verify artifacts (CSV/screenshots)
-
-See Also:
-- loop.py: Main frame loop implementation
-- control/interface.py: NEAT genome → car control integration
+See also:
+- [loop] for the per-frame orchestration
+- [control/interface] for the C/Python controller integration
 """
 
 from __future__ import annotations
