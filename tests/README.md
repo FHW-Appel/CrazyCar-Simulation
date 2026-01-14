@@ -538,14 +538,20 @@ pytest tests/ -v -x                                 # Stop bei erstem Fehler
 - **Level 3 - System Tests**: End-to-End (geplant v2.1)
 
 ### Testverfahren
+
+**Testanzahl:** Die genaue Anzahl ändert sich mit der Zeit. Aktueller Stand (2026-01-14): **843** (`pytest --collect-only`).
+
+```powershell
+pytest --collect-only              # Zeigt "collected X items" (schnell, ohne Ausführung)
+```
 | Technik | Beschreibung | Anwendung |
 |---------|--------------|-----------|
 | **Äquivalenzklassen** | Gültige/Ungültige Eingaben gruppieren | Alle Tests |
-| **Grenzwertanalyse** | Min/Max/0-Werte testen | 36 Tests (units, actuation) |
+pytest tests/ -v                    # Alle Tests
 | **Zustandsübergänge** | Init→Update→Draw→Finish | Integration Tests |
 | **Mock-basiert** | Deterministische Tests | Alle Integration Tests |
 | **Parametrisierung** | Data-Driven Testing | 180+ Tests |
-| **Fixtures** | Code-Wiederverwendung (DRY) | Alle refaktorierten Tests |
+### Unit Tests
 
 ### Code-Qualität (TDD + pytest Best Practices)
 - **AAA-Pattern** - Arrange-Act-Assert in allen Tests
@@ -555,7 +561,7 @@ pytest tests/ -v -x                                 # Stop bei erstem Fehler
 - **Docstrings** - Testbasis, Testverfahren, Erwartungen dokumentiert
 - **Testgruppen** - Logische Strukturierung (TESTGRUPPE 1-8)
 
-### pytest Markers
+### Integration Tests
 
 #### Builtin Markers (eingebaut)
 | Marker | Beschreibung |
